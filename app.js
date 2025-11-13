@@ -185,13 +185,25 @@ async function apiPost(action, payload) {
 
   const res = await fetch(API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // YAHAN TRICK: application/json ki jagah text/plain
+    // taki browser preflight OPTIONS na bheje, CORS ka panga na ho
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body)
   });
 
-  const data = await res.json();
+  const text = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    console.error('Response JSON parse error:', err, 'raw:', text);
+    throw err; // ispe upar wala catch "Error during login" dikhaa dega
+  }
+
   return data;
 }
+
 
 /************** TABS + NAV **************/
 function initTabs() {
