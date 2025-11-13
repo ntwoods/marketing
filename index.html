@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sales Activity Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div id="app" data-api-url="https://script.google.com/macros/s/AKfycbw_6EiAXbNw58e8XvGqXvhOwanp22uNc12QQqTjm396RTTL7QLx1ZgMiTqN69s28ZwSNA/exec">
+    <!-- Top Bar -->
+    <header class="app-header">
+      <div class="app-title">
+        <span class="app-logo">SA</span>
+        <div>
+          <div class="app-name">Sales Activity</div>
+          <div class="app-subtitle">Calls • Visits • Followups</div>
+        </div>
+      </div>
+      <button id="btnSignOut" class="ghost-btn hidden">Sign out</button>
+    </header>
+
+    <!-- Auth Section -->
+    <main id="authSection" class="screen center-screen">
+      <div class="card">
+        <h1 class="card-title">Welcome</h1>
+        <p class="card-text">
+          Please sign in with your Google account to continue.
+        </p>
+        <div id="g_id_signin"></div>
+        <div id="authMessage" class="auth-message"></div>
+      </div>
+    </main>
+
+    <!-- Main App Section -->
+    <main id="mainSection" class="screen hidden">
+      <!-- User Info -->
+      <section class="user-bar">
+        <div class="user-info">
+          <img id="userAvatar" class="user-avatar" src="" alt="" />
+          <div>
+            <div id="userName" class="user-name"></div>
+            <div id="userEmail" class="user-email"></div>
+          </div>
+        </div>
+        <div class="user-badges">
+          <span class="chip chip-pill chip-primary" id="chipToday"></span>
+        </div>
+      </section>
+
+      <!-- Tabs -->
+      <section class="tabs">
+        <button class="tab-btn active" data-tab="tabFollowups">Follow Ups</button>
+        <button class="tab-btn" data-tab="tabAll">All Activities</button>
+        <button class="tab-btn" data-tab="tabFilters">Filters</button>
+      </section>
+
+      <!-- Tab: Followups -->
+      <section id="tabFollowups" class="tab-content active">
+        <div class="section-header">
+          <h2>Upcoming & Pending</h2>
+        </div>
+        <div class="filters-row">
+          <select id="followupTypeFilter" class="input">
+            <option value="ALL">All Types</option>
+            <option value="CALL">Calls</option>
+            <option value="VISIT">Visits</option>
+          </select>
+          <select id="followupStatusFilter" class="input">
+            <option value="FOLLOWUP">Follow-ups only</option>
+            <option value="ALL">All</option>
+            <option value="NEW">New</option>
+            <option value="MATURE">Matured</option>
+            <option value="CANCEL">Cancelled</option>
+          </select>
+        </div>
+        <div id="followupsList" class="list"></div>
+      </section>
+
+      <!-- Tab: All Activities -->
+      <section id="tabAll" class="tab-content">
+        <div class="section-header">
+          <h2>All Activities</h2>
+        </div>
+        <div id="allActivitiesList" class="list"></div>
+      </section>
+
+      <!-- Tab: Filters -->
+      <section id="tabFilters" class="tab-content">
+        <div class="section-header">
+          <h2>Quick Filters</h2>
+        </div>
+        <div class="filters-grid">
+          <div class="filter-card">
+            <label>Date Range (client side)</label>
+            <select id="quickDateFilter" class="input">
+              <option value="ALL">All</option>
+              <option value="TODAY">Today</option>
+              <option value="NEXT7">Next 7 days</option>
+              <option value="PAST">Past Due</option>
+            </select>
+          </div>
+          <div class="filter-card">
+            <label>Status</label>
+            <select id="globalStatusFilter" class="input">
+              <option value="ALL">All</option>
+              <option value="NEW">New</option>
+              <option value="FOLLOWUP">In Process (Followup)</option>
+              <option value="MATURE">Matured</option>
+              <option value="CANCEL">Cancelled</option>
+            </select>
+          </div>
+          <div class="filter-card">
+            <label>Search Client</label>
+            <input id="searchClient" class="input" placeholder="Type client name..." />
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Floating New Activity Button -->
+    <button id="btnNewActivity" class="fab hidden">+</button>
+
+    <!-- Bottom Navigation -->
+    <nav id="bottomNav" class="bottom-nav hidden">
+      <button class="bottom-nav-btn active" data-tab="tabFollowups">
+        <span>Follow Ups</span>
+      </button>
+      <button class="bottom-nav-btn" data-tab="tabAll">
+        <span>Activities</span>
+      </button>
+      <button class="bottom-nav-btn" data-tab="tabFilters">
+        <span>Filters</span>
+      </button>
+    </nav>
+
+    <!-- New Activity Modal -->
+    <div id="activityModal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-body">
+        <header class="modal-header">
+          <h2>New Activity</h2>
+          <button id="btnCloseModal" class="icon-btn">&times;</button>
+        </header>
+
+        <!-- Activity Type Switch -->
+        <div class="type-switch">
+          <button class="type-btn active" data-type="CALL">Call</button>
+          <button class="type-btn" data-type="VISIT">Visit</button>
+        </div>
+
+        <!-- Common Fields -->
+        <div class="form-group">
+          <label>Client Name</label>
+          <input id="fieldClientName" class="input" placeholder="Client Name" />
+        </div>
+
+        <div id="callFields" class="type-fields">
+          <div class="form-group">
+            <label>Mobile No.</label>
+            <input id="fieldMobile" class="input" maxlength="10" placeholder="10 digit mobile" />
+          </div>
+        </div>
+
+        <div id="visitFields" class="type-fields hidden">
+          <div class="form-group">
+            <label>Station</label>
+            <input id="fieldStation" class="input" placeholder="City / Station" />
+          </div>
+          <div class="form-group">
+            <label>Short Address</label>
+            <input id="fieldShortAddress" class="input" placeholder="Short Address" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Remark</label>
+          <textarea id="fieldRemark" class="input" rows="3" placeholder="Write your remark..."></textarea>
+        </div>
+
+        <!-- Followup DateTime -->
+        <div id="followupFields" class="form-group hidden">
+          <label>Follow Up Date &amp; Time</label>
+          <input id="fieldFollowupAt" class="input" type="datetime-local" />
+        </div>
+
+        <!-- Membership Form (Deal Mature) -->
+        <div id="membershipSection" class="membership hidden">
+          <h3>Association Membership</h3>
+          <div class="form-group">
+            <label>Firm Name</label>
+            <input id="fieldMembership1" class="input" placeholder="Firm / Association Name" />
+          </div>
+          <div class="form-group">
+            <label>Contact Person</label>
+            <input id="fieldMembership2" class="input" placeholder="Contact Person Name" />
+          </div>
+          <div class="form-group">
+            <label>GST / ID</label>
+            <input id="fieldMembership3" class="input" placeholder="GST / Association ID" />
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="btn-row">
+          <button id="btnDealCancel" class="btn btn-danger">Deal Cancel</button>
+          <button id="btnFollowup" class="btn btn-secondary">Follow Up Required</button>
+          <button id="btnDealMature" class="btn btn-primary">Deal Mature</button>
+        </div>
+        <div id="modalError" class="form-error"></div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
