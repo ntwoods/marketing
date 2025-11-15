@@ -575,3 +575,13 @@ body {
     padding: 8px 8px;
   }
 }
+
+/* Clickable badge for actions on followups */
+.badge-type-action {
+  cursor: pointer;
+  border: none;        /* button ka default border hata dega */
+}
+
+.badge-type-action:focus {
+  outline: none;
+}
