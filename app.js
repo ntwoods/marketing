@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initFab();
   initModal();
   initFilters();
+  initFollowupActionClicks();   // 🔴 NEW
   initSignOut();
 
   initGoogleIdentity();
@@ -44,6 +45,9 @@ let fieldMembership1, fieldMembership2, fieldMembership3;
 let btnDealCancel, btnFollowup, btnDealMature, modalError, toastEl;
 let userAvatar, userNameEl, userEmailEl;
 let authMessage;
+
+// 🔴 current followup context (parentId etc.)
+let currentFollowupParentId = null;
 
 function initElements() {
   authSection = document.getElementById('authSection');
@@ -185,8 +189,7 @@ async function apiPost(action, payload) {
 
   const res = await fetch(API_URL, {
     method: 'POST',
-    // YAHAN TRICK: application/json ki jagah text/plain
-    // taki browser preflight OPTIONS na bheje, CORS ka panga na ho
+    // application/json ki jagah text/plain
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body)
   });
@@ -198,7 +201,7 @@ async function apiPost(action, payload) {
     data = JSON.parse(text);
   } catch (err) {
     console.error('Response JSON parse error:', err, 'raw:', text);
-    throw err; // ispe upar wala catch "Error during login" dikhaa dega
+    throw err;
   }
 
   return data;
@@ -253,6 +256,7 @@ function syncTopTabs(tabId) {
 /************** FAB + MODAL **************/
 function initFab() {
   btnNewActivity.addEventListener('click', () => {
+    // New activity (no parent followup)
     openActivityModal();
   });
 }
@@ -279,8 +283,32 @@ function initModal() {
   btnDealMature.addEventListener('click', () => saveActivityWithStatus('MATURE'));
 }
 
-function openActivityModal() {
+// 🔴 Open modal: optionally with prefilled data from a followup
+function openActivityModal(prefill) {
   clearModal();
+
+  let typeToSet = 'CALL';
+  if (prefill && prefill.type) {
+    typeToSet = prefill.type;
+  }
+
+  // Set active type button
+  typeButtons.forEach(btn => {
+    const isActive = btn.dataset.type === typeToSet;
+    btn.classList.toggle('active', isActive);
+  });
+  updateTypeVisibility(typeToSet);
+
+  if (prefill) {
+    if (prefill.clientName) fieldClientName.value = prefill.clientName;
+    if (prefill.mobile) fieldMobile.value = prefill.mobile;
+    if (prefill.station) fieldStation.value = prefill.station;
+    if (prefill.shortAddress) fieldShortAddress.value = prefill.shortAddress;
+    currentFollowupParentId = prefill.parentId || null;
+  } else {
+    currentFollowupParentId = null;
+  }
+
   activityModal.classList.remove('hidden');
 }
 
@@ -317,6 +345,7 @@ function clearModal() {
   membershipSection.classList.add('hidden');
   followupFields.classList.add('hidden');
   modalError.textContent = '';
+  currentFollowupParentId = null; // 🔴 reset parent
 }
 
 /************** SAVE ACTIVITY **************/
@@ -383,7 +412,7 @@ async function saveActivityWithStatus(status) {
         remark,
         status: finalStatus,
         followupAt: finalFollowupAt,
-        parentId: '',
+        parentId: currentFollowupParentId || '',   // 🔴 IMPORTANT
         membershipField1,
         membershipField2,
         membershipField3
@@ -434,6 +463,27 @@ function initFilters() {
     state.filters.searchClient = searchClientInput.value.toLowerCase();
     renderFollowups();
     renderAllActivities();
+  });
+}
+
+/************** FOLLOWUP ACTION CLICK (NEW) **************/
+function initFollowupActionClicks() {
+  if (!followupsList) return;
+
+  followupsList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.badge-type-action');
+    if (!btn) return;
+
+    const prefill = {
+      type: btn.dataset.type || 'CALL',
+      clientName: btn.dataset.clientName || '',
+      mobile: btn.dataset.mobile || '',
+      station: btn.dataset.station || '',
+      shortAddress: btn.dataset.shortAddress || '',
+      parentId: btn.dataset.parentId || ''
+    };
+
+    openActivityModal(prefill);
   });
 }
 
@@ -512,9 +562,19 @@ function renderFollowups() {
     left.appendChild(sub);
 
     const right = document.createElement('div');
-    const badgeType = document.createElement('span');
-    badgeType.className = 'badge ' + (a.type === 'CALL' ? 'badge-call' : 'badge-visit');
+
+    // 🔴 CLICKABLE Call / Visit chip with data- attributes
+    const badgeType = document.createElement('button');
+    badgeType.type = 'button';
+    badgeType.className = 'badge badge-type-action ' + (a.type === 'CALL' ? 'badge-call' : 'badge-visit');
     badgeType.textContent = a.type === 'CALL' ? 'Call' : 'Visit';
+
+    badgeType.dataset.type = a.type || 'CALL';
+    badgeType.dataset.clientName = a.clientName || '';
+    badgeType.dataset.mobile = a.mobile || '';
+    badgeType.dataset.station = a.station || '';
+    badgeType.dataset.shortAddress = a.shortAddress || '';
+    badgeType.dataset.parentId = a.id || '';
 
     const badgeStatus = document.createElement('span');
     badgeStatus.className = 'badge ' + getStatusBadgeClass_(a.status);
