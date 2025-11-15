@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initFab();
   initModal();
   initFilters();
-  initFollowupActionClicks();   // 🔴 NEW
+  initFollowupActionClicks();   // clickable followup badge
   initSignOut();
 
   initGoogleIdentity();
@@ -46,7 +46,7 @@ let btnDealCancel, btnFollowup, btnDealMature, modalError, toastEl;
 let userAvatar, userNameEl, userEmailEl;
 let authMessage;
 
-// 🔴 current followup context (parentId etc.)
+// current followup context (parentId etc.)
 let currentFollowupParentId = null;
 
 function initElements() {
@@ -152,7 +152,6 @@ async function handleCredentialResponse(response) {
     btnNewActivity.classList.remove('hidden');
     document.getElementById('bottomNav').classList.remove('hidden');
 
-    // Set user UI
     if (state.user.picture) userAvatar.src = state.user.picture;
     userNameEl.textContent = state.user.name || 'Sales User';
     userEmailEl.textContent = state.user.email || '';
@@ -182,14 +181,10 @@ function initSignOut() {
 
 /************** API **************/
 async function apiPost(action, payload) {
-  const body = {
-    action,
-    ...payload
-  };
+  const body = { action, ...payload };
 
   const res = await fetch(API_URL, {
     method: 'POST',
-    // application/json ki jagah text/plain
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body)
   });
@@ -206,7 +201,6 @@ async function apiPost(action, payload) {
 
   return data;
 }
-
 
 /************** TABS + NAV **************/
 function initTabs() {
@@ -283,16 +277,13 @@ function initModal() {
   btnDealMature.addEventListener('click', () => saveActivityWithStatus('MATURE'));
 }
 
-// 🔴 Open modal: optionally with prefilled data from a followup
+// Open modal: optionally with prefilled data from a followup
 function openActivityModal(prefill) {
   clearModal();
 
   let typeToSet = 'CALL';
-  if (prefill && prefill.type) {
-    typeToSet = prefill.type;
-  }
+  if (prefill && prefill.type) typeToSet = prefill.type;
 
-  // Set active type button
   typeButtons.forEach(btn => {
     const isActive = btn.dataset.type === typeToSet;
     btn.classList.toggle('active', isActive);
@@ -345,7 +336,7 @@ function clearModal() {
   membershipSection.classList.add('hidden');
   followupFields.classList.add('hidden');
   modalError.textContent = '';
-  currentFollowupParentId = null; // 🔴 reset parent
+  currentFollowupParentId = null;
 }
 
 /************** SAVE ACTIVITY **************/
@@ -380,7 +371,6 @@ async function saveActivityWithStatus(status) {
     }
   }
 
-  // Status-wise validations & UI:
   let finalStatus = status;
   let finalFollowupAt = followupAt;
 
@@ -412,7 +402,7 @@ async function saveActivityWithStatus(status) {
         remark,
         status: finalStatus,
         followupAt: finalFollowupAt,
-        parentId: currentFollowupParentId || '',   // 🔴 IMPORTANT
+        parentId: currentFollowupParentId || '',
         membershipField1,
         membershipField2,
         membershipField3
@@ -466,7 +456,7 @@ function initFilters() {
   });
 }
 
-/************** FOLLOWUP ACTION CLICK (NEW) **************/
+/************** FOLLOWUP ACTION CLICK **************/
 function initFollowupActionClicks() {
   if (!followupsList) return;
 
@@ -497,9 +487,24 @@ function renderFollowups() {
   const { followupType, followupStatus, quickDate, searchClient } = state.filters;
   const now = new Date();
 
+  // 1) pehle pata karo kaun-se followups satisfy ho chuke hain
+  const satisfiedParentIds = new Set();
+  state.activities.forEach(act => {
+    if (!act.parentId) return;
+    const st = act.status;
+    if (st === 'MATURE' || st === 'CANCEL' || st === 'FOLLOWUP') {
+      satisfiedParentIds.add(String(act.parentId));
+    }
+  });
+
   const items = state.activities.filter(a => {
     const isFollowup = a.status === 'FOLLOWUP';
+
+    // followup tab default "Follow-ups only" hai
     if (!isFollowup && followupStatus === 'FOLLOWUP') return false;
+
+    // jis followup ka already koi response aa gaya (Mature/Cancel/Next followup)
+    if (satisfiedParentIds.has(String(a.id))) return false;
 
     if (followupStatus !== 'ALL' && followupStatus !== 'FOLLOWUP') {
       if (a.status !== followupStatus) return false;
@@ -563,7 +568,6 @@ function renderFollowups() {
 
     const right = document.createElement('div');
 
-    // 🔴 CLICKABLE Call / Visit chip with data- attributes
     const badgeType = document.createElement('button');
     badgeType.type = 'button';
     badgeType.className = 'badge badge-type-action ' + (a.type === 'CALL' ? 'badge-call' : 'badge-visit');
@@ -601,13 +605,9 @@ function renderAllActivities() {
   const now = new Date();
 
   const items = state.activities.filter(a => {
-    if (globalStatus !== 'ALL' && a.status !== globalStatus) {
-      return false;
-    }
+    if (globalStatus !== 'ALL' && a.status !== globalStatus) return false;
 
-    if (searchClient && !String(a.clientName || '').toLowerCase().includes(searchClient)) {
-      return false;
-    }
+    if (searchClient && !String(a.clientName || '').toLowerCase().includes(searchClient)) return false;
 
     if (quickDate !== 'ALL') {
       if (!a.followupAt) return false;
