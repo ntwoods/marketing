@@ -528,6 +528,13 @@ body {
   font-size: 14px;
 }
 
+/* NEW: form hint (for file input note) */
+.form-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Buttons row */
 .btn-row {
   display: flex;
@@ -579,7 +586,7 @@ body {
 /* Clickable badge for actions on followups */
 .badge-type-action {
   cursor: pointer;
-  border: none;        /* button ka default border hata dega */
+  border: none;
 }
 
 .badge-type-action:focus {
