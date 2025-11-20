@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initFab();
   initModal();
   initFilters();
-  initFollowupActionClicks();   // clickable followup badge
+  initFollowupActionClicks();
   initSignOut();
 
   initGoogleIdentity();
@@ -41,7 +41,7 @@ let tabButtons, bottomNavButtons;
 let btnNewActivity, activityModal, btnCloseModal;
 let typeButtons, callFields, visitFields, followupFields, membershipSection;
 let fieldClientName, fieldMobile, fieldStation, fieldShortAddress, fieldRemark, fieldFollowupAt;
-let fieldMembership1, fieldMembership2, fieldMembership3;
+let fieldCompanyName, fieldMembershipFiles;
 let btnDealCancel, btnFollowup, btnDealMature, modalError, toastEl;
 let userAvatar, userNameEl, userEmailEl;
 let authMessage;
@@ -83,9 +83,9 @@ function initElements() {
   fieldRemark = document.getElementById('fieldRemark');
   fieldFollowupAt = document.getElementById('fieldFollowupAt');
 
-  fieldMembership1 = document.getElementById('fieldMembership1');
-  fieldMembership2 = document.getElementById('fieldMembership2');
-  fieldMembership3 = document.getElementById('fieldMembership3');
+  // NEW membership fields
+  fieldCompanyName = document.getElementById('fieldCompanyName');
+  fieldMembershipFiles = document.getElementById('fieldMembershipFiles');
 
   btnDealCancel = document.getElementById('btnDealCancel');
   btnFollowup = document.getElementById('btnFollowup');
@@ -250,7 +250,6 @@ function syncTopTabs(tabId) {
 /************** FAB + MODAL **************/
 function initFab() {
   btnNewActivity.addEventListener('click', () => {
-    // New activity (no parent followup)
     openActivityModal();
   });
 }
@@ -330,9 +329,11 @@ function clearModal() {
   fieldShortAddress.value = '';
   fieldRemark.value = '';
   fieldFollowupAt.value = '';
-  fieldMembership1.value = '';
-  fieldMembership2.value = '';
-  fieldMembership3.value = '';
+
+  // membership fields reset
+  if (fieldCompanyName) fieldCompanyName.value = '';
+  if (fieldMembershipFiles) fieldMembershipFiles.value = '';
+
   membershipSection.classList.add('hidden');
   followupFields.classList.add('hidden');
   modalError.textContent = '';
@@ -355,9 +356,9 @@ async function saveActivityWithStatus(status) {
   const shortAddress = fieldShortAddress.value.trim();
   const remark = fieldRemark.value.trim();
   const followupAt = fieldFollowupAt.value ? fieldFollowupAt.value : '';
-  const membershipField1 = fieldMembership1.value.trim();
-  const membershipField2 = fieldMembership2.value.trim();
-  const membershipField3 = fieldMembership3.value.trim();
+
+  const companyName = fieldCompanyName ? fieldCompanyName.value.trim() : '';
+  const files = fieldMembershipFiles ? fieldMembershipFiles.files : null;
 
   if (!clientName) {
     modalError.textContent = 'Client name is required.';
@@ -382,10 +383,26 @@ async function saveActivityWithStatus(status) {
     }
   }
 
+  // Membership logic for DEAL MATURE
+  let membershipFilesPayload = [];
   if (status === 'MATURE') {
     membershipSection.classList.remove('hidden');
-    if (!membershipField1) {
-      modalError.textContent = 'Please fill membership details (Firm Name at least).';
+
+    if (!companyName) {
+      modalError.textContent = 'Please fill Company Name.';
+      return;
+    }
+
+    if (!files || files.length === 0) {
+      modalError.textContent = 'Please attach at least one membership form file.';
+      return;
+    }
+
+    try {
+      membershipFilesPayload = await readFilesAsBase64(files);
+    } catch (err) {
+      console.error(err);
+      modalError.textContent = 'Error reading files. Please try again.';
       return;
     }
   }
@@ -403,9 +420,8 @@ async function saveActivityWithStatus(status) {
         status: finalStatus,
         followupAt: finalFollowupAt,
         parentId: currentFollowupParentId || '',
-        membershipField1,
-        membershipField2,
-        membershipField3
+        membershipCompanyName: companyName,
+        membershipFiles: membershipFilesPayload
       }
     };
 
@@ -424,6 +440,35 @@ async function saveActivityWithStatus(status) {
     console.error(err);
     modalError.textContent = 'Unexpected error';
   }
+}
+
+/**
+ * Files ko base64 string mein convert karega.
+ * Output: [{ name, type, content }]
+ */
+function readFilesAsBase64(fileList) {
+  const files = Array.from(fileList);
+
+  return Promise.all(
+    files.map(file => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result; // data:*/*;base64,XXXX
+          const base64 = typeof result === 'string'
+            ? result.split(',')[1]
+            : '';
+          resolve({
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            content: base64
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    })
+  );
 }
 
 /************** FILTERS **************/
@@ -487,7 +532,7 @@ function renderFollowups() {
   const { followupType, followupStatus, quickDate, searchClient } = state.filters;
   const now = new Date();
 
-  // 1) pehle pata karo kaun-se followups satisfy ho chuke hain
+  // 1) satisfied followups
   const satisfiedParentIds = new Set();
   state.activities.forEach(act => {
     if (!act.parentId) return;
@@ -500,10 +545,8 @@ function renderFollowups() {
   const items = state.activities.filter(a => {
     const isFollowup = a.status === 'FOLLOWUP';
 
-    // followup tab default "Follow-ups only" hai
     if (!isFollowup && followupStatus === 'FOLLOWUP') return false;
 
-    // jis followup ka already koi response aa gaya (Mature/Cancel/Next followup)
     if (satisfiedParentIds.has(String(a.id))) return false;
 
     if (followupStatus !== 'ALL' && followupStatus !== 'FOLLOWUP') {
