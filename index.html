@@ -11,6 +11,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+  <!-- API URL ko apne Apps Script deployment ke hisaab se change kar lena -->
   <div id="app" data-api-url="https://script.google.com/macros/s/AKfycbw_6EiAXbNw58e8XvGqXvhOwanp22uNc12QQqTjm396RTTL7QLx1ZgMiTqN69s28ZwSNA/exec">
     <!-- Top Bar -->
     <header class="app-header">
@@ -188,20 +189,24 @@
           <input id="fieldFollowupAt" class="input" type="datetime-local" />
         </div>
 
-        <!-- Membership Form (Deal Mature) -->
+        <!-- Membership Form (Deal Mature) – UPDATED -->
         <div id="membershipSection" class="membership hidden">
           <h3>Association Membership</h3>
           <div class="form-group">
-            <label>Firm Name</label>
-            <input id="fieldMembership1" class="input" placeholder="Firm / Association Name" />
+            <label>Company Name</label>
+            <input id="fieldCompanyName" class="input" placeholder="Company Name" />
           </div>
           <div class="form-group">
-            <label>Contact Person</label>
-            <input id="fieldMembership2" class="input" placeholder="Contact Person Name" />
-          </div>
-          <div class="form-group">
-            <label>GST / ID</label>
-            <input id="fieldMembership3" class="input" placeholder="GST / Association ID" />
+            <label>Membership Association Form(s)</label>
+            <input
+              id="fieldMembershipFiles"
+              class="input"
+              type="file"
+              multiple
+            />
+            <div class="form-hint">
+              You can attach multiple files (any type).
+            </div>
           </div>
         </div>
 
