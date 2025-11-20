@@ -375,6 +375,7 @@ async function saveActivityWithStatus(status) {
   let finalStatus = status;
   let finalFollowupAt = followupAt;
 
+  // FOLLOWUP case: followup date/time mandatory
   if (status === 'FOLLOWUP') {
     followupFields.classList.remove('hidden');
     if (!followupAt) {
@@ -383,7 +384,7 @@ async function saveActivityWithStatus(status) {
     }
   }
 
-  // Membership logic for DEAL MATURE
+  // DEAL MATURE case: membership data mandatory
   let membershipFilesPayload = [];
   if (status === 'MATURE') {
     membershipSection.classList.remove('hidden');
@@ -400,6 +401,7 @@ async function saveActivityWithStatus(status) {
 
     try {
       membershipFilesPayload = await readFilesAsBase64(files);
+      console.log('membershipFilesPayload', membershipFilesPayload);
     } catch (err) {
       console.error(err);
       modalError.textContent = 'Error reading files. Please try again.';
