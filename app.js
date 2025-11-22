@@ -562,13 +562,13 @@ async function saveActivity() {
     formData.append('remark', remark);
     formData.append('nextActionType', nextAction);
     formData.append('nextFollowupTs', String(ms));
-  } else if (outcome === 'DEAL_MATURED') {
-    const remark = document.getElementById('deal-remark').value.trim();
-    const fileInput = document.getElementById('deal-file');
-    if (fileInput.files.length > 0) {
-      formData.append('file1', fileInput.files[0]); // name doesn't matter, server takes first file
-    }
-    formData.append('remark', remark);
+} else if (outcome === 'DEAL_MATURED') {
+  const remark = document.getElementById('deal-remark').value.trim();
+  const fileInput = document.getElementById('deal-file');
+  if (fileInput.files.length > 0) {
+    formData.append('file1', fileInput.files[0]); // name doesn't matter, server takes first file
+  }
+  formData.append('remark', remark);
   } else if (outcome === 'DEAL_CANCELLED') {
     const remark = document.getElementById('cancel-remark').value.trim();
     if (!remark) {
