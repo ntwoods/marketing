@@ -576,7 +576,6 @@ async function saveActivity() {
     formData.append('fileName', file.name);
     formData.append('fileMimeType', file.type || 'application/octet-stream');
   }
-
   formData.append('remark', remark);
   } else if (outcome === 'DEAL_CANCELLED') {
     const remark = document.getElementById('cancel-remark').value.trim();
