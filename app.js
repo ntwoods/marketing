@@ -590,22 +590,21 @@ async function saveActivity() {
     document.getElementById('btn-save-activity').disabled = true;
     const res = await fetch(API_BASE, {
       method: 'POST',
-      mode: 'no-cors',
       body: formData
     });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'API error');
+
     closeActivityModal();
     // Refresh data
-    refreshFollowups();
-    refreshActivities();
-    fetchBootstrap();
+    await Promise.all([refreshFollowups(), refreshActivities(), fetchBootstrap()]);
     completingFollowup = null;
   } catch (err) {
-    alert('Error saving activity: ');
+    alert('Error saving activity: ' + err.message);
   } finally {
     document.getElementById('btn-save-activity').disabled = false;
   }
 }
-
 /******** COUNTDOWN TIMER ********/
 
 function startCountdownTimer() {
