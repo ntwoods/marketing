@@ -596,10 +596,12 @@ async function saveActivity() {
     });
     closeActivityModal();
     // Refresh data
-    await Promise.all([refreshFollowups(), refreshActivities(), fetchBootstrap()]);
+    refreshFollowups();
+    refreshActivities();
+    fetchBootstrap();
     completingFollowup = null;
   } catch (err) {
-    alert('Error saving activity: ' + err.message);
+    alert('Error saving activity: ');
   } finally {
     document.getElementById('btn-save-activity').disabled = false;
   }
