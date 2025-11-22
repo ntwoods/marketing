@@ -441,12 +441,14 @@ function openActivityModal(prefill = {}) {
   document.getElementById('client-station').value = prefill.station || '';
   document.getElementById('client-address').value = prefill.address || '';
 
-  // Activity type
+    // Activity type
   const typeToSelect = prefill.forceType || 'CALL';
   document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.type === typeToSelect);
-    btn.disabled = !!prefill.forceType; // lock type if coming from followup
+    // Followup se aaye ho tab bhi user ko type change karne do
+    btn.disabled = false;
   });
+
 
   // Default outcome: Follow up required
   document.querySelectorAll('.outcome-btn').forEach(btn => {
