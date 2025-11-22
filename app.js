@@ -1,789 +1,627 @@
-// app.js
+/******** CONFIG ********/
 
-const CLIENT_ID = '360849757137-agopfs0m8rgmcj541ucpg22btep5olt3.apps.googleusercontent.com';
+// 👇 Yahan tumhein apna Apps Script Web App URL daalna hai
+const API_BASE = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
 
-let API_URL = '';
-let state = {
-  idToken: null,
-  user: null,
-  activities: [],
-  filters: {
-    followupType: 'ALL',
-    followupStatus: 'FOLLOWUP',
-    globalStatus: 'ALL',
-    quickDate: 'ALL',
-    searchClient: ''
+let currentUser = null;
+let bootstrapData = {
+  stats: null,
+  followups: [],
+  activities: []
+};
+let countdownInterval = null;
+let currentTab = 'FOLLOWUPS';
+let completingFollowup = null; // if activity is from followup card
+
+/******** GOOGLE SIGN-IN ********/
+
+function decodeJwtResponse(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const payload = parts[1]
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const decoded = atob(payload);
+  return JSON.parse(decoded);
+}
+
+window.handleGoogleCredential = (response) => {
+  try {
+    const payload = decodeJwtResponse(response.credential);
+    const email = payload.email;
+    const name = payload.name || '';
+    if (!email) {
+      showLoginError('Email not found in Google response.');
+      return;
+    }
+    currentUser = { email, name };
+    localStorage.setItem('marketingUser', JSON.stringify(currentUser));
+    initAppAfterLogin();
+  } catch (err) {
+    showLoginError('Login failed: ' + err.message);
   }
 };
 
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+}
+
+/******** INIT ********/
+
 document.addEventListener('DOMContentLoaded', () => {
-  const appRoot = document.getElementById('app');
-  API_URL = appRoot.dataset.apiUrl;
+  const saved = localStorage.getItem('marketingUser');
+  if (saved) {
+    try {
+      currentUser = JSON.parse(saved);
+      initAppAfterLogin();
+    } catch (e) {
+      console.warn(e);
+    }
+  }
 
-  initElements();
-  initTabs();
-  initBottomNav();
-  initFab();
-  initModal();
-  initFilters();
-  initFollowupActionClicks();
-  initSignOut();
+  // Tabs
+  document.getElementById('tab-followups').addEventListener('click', () => switchTab('FOLLOWUPS'));
+  document.getElementById('tab-activities').addEventListener('click', () => switchTab('ACTIVITIES'));
 
-  initGoogleIdentity();
+  // Filters
+  document.getElementById('search-input').addEventListener('input', renderCurrentTab);
+  document.getElementById('followup-filter').addEventListener('change', renderFollowups);
+  document.getElementById('activity-filter').addEventListener('change', renderActivities);
+
+  // FAB
+  document.getElementById('btn-add').addEventListener('click', () => openActivityModal());
+
+  // Modal buttons
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeActivityModal);
+  document.getElementById('btn-save-activity').addEventListener('click', saveActivity);
+
+  document.getElementById('btn-close-history').addEventListener('click', closeHistoryModal);
+
+  // Logout
+  document.getElementById('btn-logout').addEventListener('click', () => {
+    localStorage.removeItem('marketingUser');
+    currentUser = null;
+    showScreen('login');
+  });
+
+  // Activity type toggle
+  document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Visit -> address required, Call -> optional
+      const type = btn.dataset.type;
+      const addressGroup = document.getElementById('address-group');
+      addressGroup.style.display = type === 'VISIT' ? 'block' : 'block'; // we still show field, but you can enforce required in save
+    });
+  });
+
+  // Outcome toggle
+  document.querySelectorAll('.outcome-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.outcome-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      syncOutcomeUI();
+    });
+  });
 });
 
-/************** ELEMENTS **************/
-let authSection, mainSection, btnSignOut, chipToday;
-let followupsList, allActivitiesList;
-let followupTypeFilter, followupStatusFilter;
-let quickDateFilter, globalStatusFilter, searchClientInput;
-let tabButtons, bottomNavButtons;
-let btnNewActivity, activityModal, btnCloseModal;
-let typeButtons, callFields, visitFields, followupFields, membershipSection;
-let fieldClientName, fieldMobile, fieldStation, fieldShortAddress, fieldRemark, fieldFollowupAt;
-let fieldCompanyName, fieldMembershipFiles;
-let btnDealCancel, btnFollowup, btnDealMature, modalError, toastEl;
-let userAvatar, userNameEl, userEmailEl;
-let authMessage;
-
-// current followup context (parentId etc.)
-let currentFollowupParentId = null;
-
-function initElements() {
-  authSection = document.getElementById('authSection');
-  mainSection = document.getElementById('mainSection');
-  btnSignOut = document.getElementById('btnSignOut');
-  chipToday = document.getElementById('chipToday');
-
-  followupsList = document.getElementById('followupsList');
-  allActivitiesList = document.getElementById('allActivitiesList');
-
-  followupTypeFilter = document.getElementById('followupTypeFilter');
-  followupStatusFilter = document.getElementById('followupStatusFilter');
-  quickDateFilter = document.getElementById('quickDateFilter');
-  globalStatusFilter = document.getElementById('globalStatusFilter');
-  searchClientInput = document.getElementById('searchClient');
-
-  tabButtons = document.querySelectorAll('.tab-btn');
-  bottomNavButtons = document.querySelectorAll('.bottom-nav-btn');
-
-  btnNewActivity = document.getElementById('btnNewActivity');
-  activityModal = document.getElementById('activityModal');
-  btnCloseModal = document.getElementById('btnCloseModal');
-  typeButtons = document.querySelectorAll('.type-btn');
-  callFields = document.getElementById('callFields');
-  visitFields = document.getElementById('visitFields');
-  followupFields = document.getElementById('followupFields');
-  membershipSection = document.getElementById('membershipSection');
-
-  fieldClientName = document.getElementById('fieldClientName');
-  fieldMobile = document.getElementById('fieldMobile');
-  fieldStation = document.getElementById('fieldStation');
-  fieldShortAddress = document.getElementById('fieldShortAddress');
-  fieldRemark = document.getElementById('fieldRemark');
-  fieldFollowupAt = document.getElementById('fieldFollowupAt');
-
-  // NEW membership fields
-  fieldCompanyName = document.getElementById('fieldCompanyName');
-  fieldMembershipFiles = document.getElementById('fieldMembershipFiles');
-
-  btnDealCancel = document.getElementById('btnDealCancel');
-  btnFollowup = document.getElementById('btnFollowup');
-  btnDealMature = document.getElementById('btnDealMature');
-  modalError = document.getElementById('modalError');
-  toastEl = document.getElementById('toast');
-
-  userAvatar = document.getElementById('userAvatar');
-  userNameEl = document.getElementById('userName');
-  userEmailEl = document.getElementById('userEmail');
-
-  authMessage = document.getElementById('authMessage');
-
-  const today = new Date();
-  chipToday.textContent = today.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short'
-  });
-}
-
-/************** GOOGLE IDENTITY **************/
-function initGoogleIdentity() {
-  window.onload = () => {
-    /* global google */
-    if (!window.google || !google.accounts || !google.accounts.id) {
-      authMessage.textContent = 'Unable to load Google Sign-In.';
-      return;
-    }
-
-    google.accounts.id.initialize({
-      client_id: CLIENT_ID,
-      callback: handleCredentialResponse
-    });
-
-    google.accounts.id.renderButton(
-      document.getElementById('g_id_signin'),
-      { theme: 'outline', size: 'large', width: '240' }
-    );
-  };
-}
-
-async function handleCredentialResponse(response) {
-  try {
-    const idToken = response.credential;
-    state.idToken = idToken;
-
-    authMessage.textContent = 'Verifying...';
-    const data = await apiPost('init', { idToken });
-
-    if (!data.ok || data.code === 'NOT_ALLOWED') {
-      authMessage.textContent = 'You are not allowed to use this app.';
-      showToast('Access denied. Please contact admin.');
-      state.idToken = null;
-      return;
-    }
-
-    state.user = data.user;
-    state.activities = data.activities || [];
-
-    authSection.classList.add('hidden');
-    mainSection.classList.remove('hidden');
-    btnSignOut.classList.remove('hidden');
-    btnNewActivity.classList.remove('hidden');
-    document.getElementById('bottomNav').classList.remove('hidden');
-
-    if (state.user.picture) userAvatar.src = state.user.picture;
-    userNameEl.textContent = state.user.name || 'Sales User';
-    userEmailEl.textContent = state.user.email || '';
-
-    renderAll();
-    showToast('Signed in successfully');
-  } catch (err) {
-    console.error(err);
-    authMessage.textContent = 'Error during login.';
-    showToast('Login failed. Try again.');
-  }
-}
-
-function initSignOut() {
-  btnSignOut.addEventListener('click', () => {
-    state.idToken = null;
-    state.user = null;
-    state.activities = [];
-    mainSection.classList.add('hidden');
-    document.getElementById('bottomNav').classList.add('hidden');
-    btnNewActivity.classList.add('hidden');
-    btnSignOut.classList.add('hidden');
-    authSection.classList.remove('hidden');
-    showToast('Signed out');
-  });
-}
-
-/************** API **************/
-async function apiPost(action, payload) {
-  const body = { action, ...payload };
-
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body)
-  });
-
-  const text = await res.text();
-
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (err) {
-    console.error('Response JSON parse error:', err, 'raw:', text);
-    throw err;
-  }
-
-  return data;
-}
-
-/************** TABS + NAV **************/
-function initTabs() {
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      setActiveTab(btn.dataset.tab);
-      syncBottomNav(btn.dataset.tab);
-    });
-  });
-}
-
-function initBottomNav() {
-  bottomNavButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      setActiveTab(btn.dataset.tab);
-      syncTopTabs(btn.dataset.tab);
-    });
-  });
-}
-
-function setActiveTab(tabId) {
-  document.querySelectorAll('.tab-content').forEach(sec => {
-    sec.classList.toggle('active', sec.id === tabId);
-  });
-
-  tabButtons.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabId);
-  });
-
-  bottomNavButtons.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabId);
-  });
-}
-
-function syncBottomNav(tabId) {
-  bottomNavButtons.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabId);
-  });
-}
-
-function syncTopTabs(tabId) {
-  tabButtons.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tabId);
-  });
-}
-
-/************** FAB + MODAL **************/
-function initFab() {
-  btnNewActivity.addEventListener('click', () => {
-    openActivityModal();
-  });
-}
-
-function initModal() {
-  btnCloseModal.addEventListener('click', closeActivityModal);
-  activityModal.addEventListener('click', (e) => {
-    if (e.target === activityModal || e.target.classList.contains('modal-backdrop')) {
-      closeActivityModal();
-    }
-  });
-
-  typeButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      typeButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const type = btn.dataset.type;
-      updateTypeVisibility(type);
-    });
-  });
-
-  btnDealCancel.addEventListener('click', () => saveActivityWithStatus('CANCEL'));
-  btnFollowup.addEventListener('click', () => saveActivityWithStatus('FOLLOWUP'));
-  btnDealMature.addEventListener('click', () => saveActivityWithStatus('MATURE'));
-}
-
-// Open modal: optionally with prefilled data from a followup
-function openActivityModal(prefill) {
-  clearModal();
-
-  let typeToSet = 'CALL';
-  if (prefill && prefill.type) typeToSet = prefill.type;
-
-  typeButtons.forEach(btn => {
-    const isActive = btn.dataset.type === typeToSet;
-    btn.classList.toggle('active', isActive);
-  });
-  updateTypeVisibility(typeToSet);
-
-  if (prefill) {
-    if (prefill.clientName) fieldClientName.value = prefill.clientName;
-    if (prefill.mobile) fieldMobile.value = prefill.mobile;
-    if (prefill.station) fieldStation.value = prefill.station;
-    if (prefill.shortAddress) fieldShortAddress.value = prefill.shortAddress;
-    currentFollowupParentId = prefill.parentId || null;
+function showScreen(which) {
+  const login = document.getElementById('login-screen');
+  const main = document.getElementById('main-screen');
+  if (which === 'login') {
+    login.classList.add('active');
+    main.classList.remove('active');
   } else {
-    currentFollowupParentId = null;
+    login.classList.remove('active');
+    main.classList.add('active');
+  }
+}
+
+async function initAppAfterLogin() {
+  if (!currentUser) return;
+  showScreen('main');
+
+  document.getElementById('user-name').textContent = currentUser.name || '';
+  document.getElementById('user-email').textContent = currentUser.email || '';
+
+  await fetchBootstrap();
+}
+
+/******** API HELPERS ********/
+
+async function fetchBootstrap() {
+  try {
+    const url = `${API_BASE}?action=getBootstrap&email=${encodeURIComponent(currentUser.email)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.ok) {
+      throw new Error(data.error || 'API error');
+    }
+    bootstrapData.stats = data.stats;
+    bootstrapData.followups = data.followups || [];
+    bootstrapData.activities = data.activities || [];
+
+    updateStatsUI();
+    renderCurrentTab();
+    startCountdownTimer();
+  } catch (err) {
+    alert('Error loading data: ' + err.message);
+  }
+}
+
+async function refreshFollowups() {
+  const url = `${API_BASE}?action=listFollowups&email=${encodeURIComponent(currentUser.email)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.ok) {
+    bootstrapData.followups = data.followups || [];
+    updateStatsUI();
+    if (currentTab === 'FOLLOWUPS') renderFollowups();
+  }
+}
+
+async function refreshActivities() {
+  const url = `${API_BASE}?action=listActivities&email=${encodeURIComponent(currentUser.email)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.ok) {
+    bootstrapData.activities = data.activities || [];
+    updateStatsUI();
+    if (currentTab === 'ACTIVITIES') renderActivities();
+  }
+}
+
+/******** UI: Stats ********/
+
+function updateStatsUI() {
+  if (!bootstrapData.stats) return;
+  const { followups, activities } = bootstrapData.stats;
+
+  document.getElementById('stat-overdue').textContent = followups.overdue;
+  document.getElementById('stat-today').textContent = followups.today;
+  document.getElementById('stat-matured').textContent = activities.matured;
+  document.getElementById('stat-cancelled').textContent = activities.cancelled;
+}
+
+/******** UI: Tabs ********/
+
+function switchTab(tab) {
+  currentTab = tab;
+
+  document.getElementById('tab-followups').classList.toggle('active', tab === 'FOLLOWUPS');
+  document.getElementById('tab-activities').classList.toggle('active', tab === 'ACTIVITIES');
+
+  document.getElementById('followups-list').classList.toggle('active', tab === 'FOLLOWUPS');
+  document.getElementById('activities-list').classList.toggle('active', tab === 'ACTIVITIES');
+
+  // Swap filter select visibility
+  document.getElementById('filter-followup-container').classList.toggle('hidden', tab !== 'FOLLOWUPS');
+  document.getElementById('filter-activity-container').classList.toggle('hidden', tab !== 'ACTIVITIES');
+
+  renderCurrentTab();
+}
+
+function renderCurrentTab() {
+  if (currentTab === 'FOLLOWUPS') {
+    renderFollowups();
+  } else {
+    renderActivities();
+  }
+}
+
+/******** UI: Followups ********/
+
+function renderFollowups() {
+  const container = document.getElementById('followups-list');
+  container.innerHTML = '';
+
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const filter = document.getElementById('followup-filter').value;
+
+  let list = bootstrapData.followups || [];
+  const nowMs = Date.now();
+
+  list = list.filter(f => {
+    const text = (f.clientName + ' ' + (f.station || '') + ' ' + (f.mobile || '')).toLowerCase();
+    if (search && !text.includes(search)) return false;
+
+    if (filter === 'OVERDUE' && !f.isOverdue) return false;
+    if (filter === 'TODAY') {
+      if (!f.dueMs) return false;
+      const d = new Date(f.dueMs);
+      const today = new Date();
+      const dStr = d.toISOString().slice(0,10);
+      const tStr = today.toISOString().slice(0,10);
+      if (dStr !== tStr) return false;
+    }
+    if (filter === 'UPCOMING') {
+      if (!f.dueMs) return false;
+      if (f.dueMs <= nowMs) return false;
+    }
+
+    return true;
+  });
+
+  if (!list.length) {
+    container.innerHTML = '<p style="color:#9ca3af;font-size:0.9rem;">No follow ups.</p>';
+    return;
   }
 
-  activityModal.classList.remove('hidden');
+  list.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'card followup-card';
+    card.dataset.dueMs = f.dueMs || '';
+    card.dataset.id = f.id;
+
+    const dueLabel = formatDueLabel(f.dueMs);
+    const overdue = f.isOverdue;
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div>
+          <div class="card-title">${escapeHtml(f.clientName)} (${escapeHtml(f.mobile)})</div>
+          <div class="card-subtitle">
+            ${escapeHtml(f.station || '')}
+          </div>
+        </div>
+        <div>
+          <div class="badge ${overdue ? 'badge-overdue' : ''}">${overdue ? 'Overdue' : f.nextActionType}</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div><strong>Next:</strong> <span class="countdown-text">${dueLabel}</span></div>
+        ${f.remark ? `<div><strong>Remark:</strong> ${escapeHtml(f.remark)}</div>` : ''}
+      </div>
+      <div class="card-footer">
+        <div class="counts-pill">
+          Call: ${f.callsBefore} &middot; Visits: ${f.visitsBefore}
+        </div>
+        <div>
+          <span class="history-link" data-clientkey="${f.clientKey}">History</span>
+        </div>
+      </div>
+    `;
+
+    // Click on card => complete followup
+    card.addEventListener('click', (ev) => {
+      // avoid click from history link
+      if (ev.target.classList.contains('history-link')) return;
+      openActivityModalFromFollowup(f);
+    });
+
+    // History link
+    card.querySelector('.history-link').addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openHistoryModal(f.clientKey, f.clientName, f.mobile);
+    });
+
+    container.appendChild(card);
+  });
+}
+
+/******** UI: Activities (All Activities) ********/
+
+function renderActivities() {
+  const container = document.getElementById('activities-list');
+  container.innerHTML = '';
+
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const filter = document.getElementById('activity-filter').value;
+
+  let list = bootstrapData.activities || [];
+
+  // Filter by outcome
+  list = list.filter(a => {
+    if (filter !== 'ALL' && a.outcome !== filter) return false;
+    const text = (a.clientName + ' ' + a.station + ' ' + a.mobile).toLowerCase();
+    if (search && !text.includes(search)) return false;
+    return true;
+  });
+
+  if (!list.length) {
+    container.innerHTML = '<p style="color:#9ca3af;font-size:0.9rem;">No activities.</p>';
+    return;
+  }
+
+  // Group by clientKey and keep latest
+  const grouped = {};
+  list.forEach(a => {
+    if (!grouped[a.clientKey] || (grouped[a.clientKey].tsMs || 0) < (a.tsMs || 0)) {
+      grouped[a.clientKey] = a;
+    }
+  });
+
+  // Convert to array, sort by latest ts desc
+  const latestList = Object.values(grouped).sort((a, b) => (b.tsMs || 0) - (a.tsMs || 0));
+
+  latestList.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const dateStr = a.tsMs ? new Date(a.tsMs).toLocaleString() : '';
+
+    let outcomeLabel = a.outcome;
+    if (a.outcome === 'FOLLOW_UP') outcomeLabel = 'Follow Up';
+    if (a.outcome === 'DEAL_MATURED') outcomeLabel = 'Deal Matured';
+    if (a.outcome === 'DEAL_CANCELLED') outcomeLabel = 'Deal Cancelled';
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div>
+          <div class="card-title">${escapeHtml(a.clientName)} (${escapeHtml(a.mobile)})</div>
+          <div class="card-subtitle">${escapeHtml(a.station || '')}</div>
+        </div>
+        <div class="badge">${escapeHtml(outcomeLabel)}</div>
+      </div>
+      <div class="card-body">
+        <div><strong>Last Activity:</strong> ${a.activityType} on ${dateStr}</div>
+        ${a.remark ? `<div><strong>Remark:</strong> ${escapeHtml(a.remark)}</div>` : ''}
+        ${a.attachmentUrl ? `<div><a href="${a.attachmentUrl}" target="_blank">Association Form</a></div>` : ''}
+      </div>
+      <div class="card-footer">
+        <span class="history-link" data-clientkey="${a.clientKey}">History</span>
+        <span style="font-size:0.8rem;">Tap + to add new activity</span>
+      </div>
+    `;
+
+    card.querySelector('.history-link').addEventListener('click', () => {
+      openHistoryModal(a.clientKey, a.clientName, a.mobile);
+    });
+
+    container.appendChild(card);
+  });
+}
+
+/******** UI: History Modal ********/
+
+function openHistoryModal(clientKey, clientName, mobile) {
+  const modal = document.getElementById('history-modal');
+  document.getElementById('history-title').textContent =
+    `History: ${clientName} (${mobile})`;
+
+  const container = document.getElementById('history-list');
+  container.innerHTML = '';
+
+  const list = (bootstrapData.activities || [])
+    .filter(a => a.clientKey === clientKey)
+    .sort((a, b) => (b.tsMs || 0) - (a.tsMs || 0));
+
+  list.forEach(a => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    const dateStr = a.tsMs ? new Date(a.tsMs).toLocaleString() : '';
+
+    let tag = a.outcome;
+    if (a.outcome === 'FOLLOW_UP') tag = 'Follow Up';
+    if (a.outcome === 'DEAL_MATURED') tag = 'Deal Matured';
+    if (a.outcome === 'DEAL_CANCELLED') tag = 'Deal Cancelled';
+
+    item.innerHTML = `
+      <div class="history-item-header">
+        <div>${a.activityType} &middot; ${dateStr}</div>
+        <div class="history-tag">${escapeHtml(tag)}</div>
+      </div>
+      ${a.remark ? `<div>Remark: ${escapeHtml(a.remark)}</div>` : ''}
+    `;
+    container.appendChild(item);
+  });
+
+  modal.classList.remove('hidden');
+}
+
+function closeHistoryModal() {
+  document.getElementById('history-modal').classList.add('hidden');
+}
+
+/******** UI: Activity Modal ********/
+
+function openActivityModalFromFollowup(f) {
+  completingFollowup = f;
+  openActivityModal({
+    clientName: f.clientName,
+    mobile: f.mobile,
+    station: f.station,
+    address: f.address,
+    forceType: f.nextActionType // CALL / VISIT
+  });
+}
+
+function openActivityModal(prefill = {}) {
+  const modal = document.getElementById('activity-modal');
+  modal.classList.remove('hidden');
+
+  document.getElementById('modal-title').textContent =
+    completingFollowup ? 'Complete Follow Up' : 'Add Activity';
+
+  // Prefill fields
+  document.getElementById('client-name').value = prefill.clientName || '';
+  document.getElementById('client-mobile').value = prefill.mobile || '';
+  document.getElementById('client-station').value = prefill.station || '';
+  document.getElementById('client-address').value = prefill.address || '';
+
+  // Activity type
+  const typeToSelect = prefill.forceType || 'CALL';
+  document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.type === typeToSelect);
+    btn.disabled = !!prefill.forceType; // lock type if coming from followup
+  });
+
+  // Default outcome: Follow up required
+  document.querySelectorAll('.outcome-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.outcome === 'FOLLOW_UP');
+  });
+
+  // Clear extra fields
+  document.getElementById('followup-remark').value = '';
+  document.getElementById('followup-datetime').value = '';
+  document.getElementById('followup-next-action').value = 'CALL';
+  document.getElementById('deal-file').value = '';
+  document.getElementById('deal-remark').value = '';
+  document.getElementById('cancel-remark').value = '';
+
+  syncOutcomeUI();
 }
 
 function closeActivityModal() {
-  activityModal.classList.add('hidden');
-  clearModal();
+  document.getElementById('activity-modal').classList.add('hidden');
+  completingFollowup = null;
+  // unlock type toggles
+  document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(btn => {
+    btn.disabled = false;
+  });
 }
 
-function currentType() {
-  const active = Array.from(typeButtons).find(btn => btn.classList.contains('active'));
-  return active ? active.dataset.type : 'CALL';
+function getSelectedActivityType() {
+  const btn = document.querySelector('#activity-type-toggle .toggle-btn.active');
+  return btn ? btn.dataset.type : 'CALL';
 }
 
-function updateTypeVisibility(type) {
-  if (type === 'CALL') {
-    callFields.classList.remove('hidden');
-    visitFields.classList.add('hidden');
-  } else {
-    callFields.classList.add('hidden');
-    visitFields.classList.remove('hidden');
-  }
+function getSelectedOutcome() {
+  const btn = document.querySelector('.outcome-btn.active');
+  return btn ? btn.dataset.outcome : 'FOLLOW_UP';
 }
 
-function clearModal() {
-  fieldClientName.value = '';
-  fieldMobile.value = '';
-  fieldStation.value = '';
-  fieldShortAddress.value = '';
-  fieldRemark.value = '';
-  fieldFollowupAt.value = '';
-
-  // membership fields reset
-  if (fieldCompanyName) fieldCompanyName.value = '';
-  if (fieldMembershipFiles) fieldMembershipFiles.value = '';
-
-  membershipSection.classList.add('hidden');
-  followupFields.classList.add('hidden');
-  modalError.textContent = '';
-  currentFollowupParentId = null;
+function syncOutcomeUI() {
+  const outcome = getSelectedOutcome();
+  document.getElementById('followup-extra').classList.toggle('hidden', outcome !== 'FOLLOW_UP');
+  document.getElementById('deal-mature-extra').classList.toggle('hidden', outcome !== 'DEAL_MATURED');
+  document.getElementById('deal-cancel-extra').classList.toggle('hidden', outcome !== 'DEAL_CANCELLED');
 }
 
-/************** SAVE ACTIVITY **************/
-async function saveActivityWithStatus(status) {
-  if (!state.idToken) {
-    showToast('Please login first');
+/******** SAVE ACTIVITY ********/
+
+async function saveActivity() {
+  if (!currentUser) return;
+
+  const activityType = getSelectedActivityType(); // CALL / VISIT
+  const outcome = getSelectedOutcome();           // FOLLOW_UP / DEAL_MATURED / DEAL_CANCELLED
+
+  const clientName = document.getElementById('client-name').value.trim();
+  const mobile = document.getElementById('client-mobile').value.trim();
+  const station = document.getElementById('client-station').value.trim();
+  const address = document.getElementById('client-address').value.trim();
+
+  if (!clientName || !mobile) {
+    alert('Client name and mobile are required.');
     return;
   }
 
-  modalError.textContent = '';
-  const type = currentType();
+  const formData = new FormData();
+  formData.append('action', 'logActivity');
+  formData.append('email', currentUser.email);
+  formData.append('userName', currentUser.name || '');
+  formData.append('activityType', activityType);
+  formData.append('clientName', clientName);
+  formData.append('mobile', mobile);
+  formData.append('station', station);
+  formData.append('address', address);
+  formData.append('outcome', outcome);
 
-  const clientName = fieldClientName.value.trim();
-  const mobile = fieldMobile.value.trim();
-  const station = fieldStation.value.trim();
-  const shortAddress = fieldShortAddress.value.trim();
-  const remark = fieldRemark.value.trim();
-  const followupAt = fieldFollowupAt.value ? fieldFollowupAt.value : '';
-
-  const companyName = fieldCompanyName ? fieldCompanyName.value.trim() : '';
-  const files = fieldMembershipFiles ? fieldMembershipFiles.files : null;
-
-  if (!clientName) {
-    modalError.textContent = 'Client name is required.';
-    return;
+  if (completingFollowup) {
+    formData.append('followupId', completingFollowup.id);
   }
 
-  if (type === 'CALL') {
-    if (!mobile || mobile.length !== 10 || !/^\d{10}$/.test(mobile)) {
-      modalError.textContent = 'Valid 10 digit mobile is required for Call.';
+  if (outcome === 'FOLLOW_UP') {
+    const remark = document.getElementById('followup-remark').value.trim();
+    const dtStr = document.getElementById('followup-datetime').value;
+    const nextAction = document.getElementById('followup-next-action').value;
+
+    if (!dtStr) {
+      alert('Next follow up date & time required.');
       return;
     }
-  }
-
-  let finalStatus = status;
-  let finalFollowupAt = followupAt;
-
-  // FOLLOWUP case: followup date/time mandatory
-  if (status === 'FOLLOWUP') {
-    followupFields.classList.remove('hidden');
-    if (!followupAt) {
-      modalError.textContent = 'Please select follow up date & time.';
-      return;
-    }
-  }
-
-  // DEAL MATURE case: membership data mandatory
-  let membershipFilesPayload = [];
-  if (status === 'MATURE') {
-    membershipSection.classList.remove('hidden');
-
-    if (!companyName) {
-      modalError.textContent = 'Please fill Company Name.';
+    const dt = new Date(dtStr);
+    const ms = dt.getTime();
+    if (!ms || isNaN(ms)) {
+      alert('Invalid follow up date/time.');
       return;
     }
 
-    if (!files || files.length === 0) {
-      modalError.textContent = 'Please attach at least one membership form file.';
+    formData.append('remark', remark);
+    formData.append('nextActionType', nextAction);
+    formData.append('nextFollowupTs', String(ms));
+  } else if (outcome === 'DEAL_MATURED') {
+    const remark = document.getElementById('deal-remark').value.trim();
+    const fileInput = document.getElementById('deal-file');
+    if (fileInput.files.length > 0) {
+      formData.append('file1', fileInput.files[0]); // name doesn't matter, server takes first file
+    }
+    formData.append('remark', remark);
+  } else if (outcome === 'DEAL_CANCELLED') {
+    const remark = document.getElementById('cancel-remark').value.trim();
+    if (!remark) {
+      alert('Please add cancellation remark.');
       return;
     }
-
-    try {
-      membershipFilesPayload = await readFilesAsBase64(files);
-      console.log('membershipFilesPayload', membershipFilesPayload);
-    } catch (err) {
-      console.error(err);
-      modalError.textContent = 'Error reading files. Please try again.';
-      return;
-    }
+    formData.append('remark', remark);
   }
 
   try {
-    const payload = {
-      idToken: state.idToken,
-      activity: {
-        type,
-        clientName,
-        mobile,
-        station,
-        shortAddress,
-        remark,
-        status: finalStatus,
-        followupAt: finalFollowupAt,
-        parentId: currentFollowupParentId || '',
-        membershipCompanyName: companyName,
-        membershipFiles: membershipFilesPayload
-      }
-    };
-
-    const res = await apiPost('saveActivity', payload);
-    if (!res.ok) {
-      modalError.textContent = res.error || 'Error saving activity';
-      return;
-    }
-
-    state.activities.push(res.activity);
-    renderAll();
-    showToast('Activity saved');
+    document.getElementById('btn-save-activity').disabled = true;
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'API error');
 
     closeActivityModal();
+    // Refresh data
+    await Promise.all([refreshFollowups(), refreshActivities(), fetchBootstrap()]);
+    completingFollowup = null;
   } catch (err) {
-    console.error(err);
-    modalError.textContent = 'Unexpected error';
+    alert('Error saving activity: ' + err.message);
+  } finally {
+    document.getElementById('btn-save-activity').disabled = false;
   }
 }
 
-/**
- * Files ko base64 string mein convert karega.
- * Output: [{ name, type, content }]
- */
-function readFilesAsBase64(fileList) {
-  const files = Array.from(fileList);
+/******** COUNTDOWN TIMER ********/
 
-  return Promise.all(
-    files.map(file => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result; // data:*/*;base64,XXXX
-          const base64 = typeof result === 'string'
-            ? result.split(',')[1]
-            : '';
-          resolve({
-            name: file.name,
-            type: file.type || 'application/octet-stream',
-            content: base64
-          });
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    })
-  );
-}
-
-/************** FILTERS **************/
-function initFilters() {
-  followupTypeFilter.addEventListener('change', () => {
-    state.filters.followupType = followupTypeFilter.value;
-    renderFollowups();
-  });
-
-  followupStatusFilter.addEventListener('change', () => {
-    state.filters.followupStatus = followupStatusFilter.value;
-    renderFollowups();
-  });
-
-  quickDateFilter.addEventListener('change', () => {
-    state.filters.quickDate = quickDateFilter.value;
-    renderFollowups();
-    renderAllActivities();
-  });
-
-  globalStatusFilter.addEventListener('change', () => {
-    state.filters.globalStatus = globalStatusFilter.value;
-    renderAllActivities();
-  });
-
-  searchClientInput.addEventListener('input', () => {
-    state.filters.searchClient = searchClientInput.value.toLowerCase();
-    renderFollowups();
-    renderAllActivities();
-  });
-}
-
-/************** FOLLOWUP ACTION CLICK **************/
-function initFollowupActionClicks() {
-  if (!followupsList) return;
-
-  followupsList.addEventListener('click', (e) => {
-    const btn = e.target.closest('.badge-type-action');
-    if (!btn) return;
-
-    const prefill = {
-      type: btn.dataset.type || 'CALL',
-      clientName: btn.dataset.clientName || '',
-      mobile: btn.dataset.mobile || '',
-      station: btn.dataset.station || '',
-      shortAddress: btn.dataset.shortAddress || '',
-      parentId: btn.dataset.parentId || ''
-    };
-
-    openActivityModal(prefill);
-  });
-}
-
-/************** RENDER **************/
-function renderAll() {
-  renderFollowups();
-  renderAllActivities();
-}
-
-function renderFollowups() {
-  const { followupType, followupStatus, quickDate, searchClient } = state.filters;
-  const now = new Date();
-
-  // 1) satisfied followups
-  const satisfiedParentIds = new Set();
-  state.activities.forEach(act => {
-    if (!act.parentId) return;
-    const st = act.status;
-    if (st === 'MATURE' || st === 'CANCEL' || st === 'FOLLOWUP') {
-      satisfiedParentIds.add(String(act.parentId));
-    }
-  });
-
-  const items = state.activities.filter(a => {
-    const isFollowup = a.status === 'FOLLOWUP';
-
-    if (!isFollowup && followupStatus === 'FOLLOWUP') return false;
-
-    if (satisfiedParentIds.has(String(a.id))) return false;
-
-    if (followupStatus !== 'ALL' && followupStatus !== 'FOLLOWUP') {
-      if (a.status !== followupStatus) return false;
-    }
-
-    if (followupType !== 'ALL' && a.type !== followupType) return false;
-
-    if (searchClient && !String(a.clientName || '').toLowerCase().includes(searchClient)) return false;
-
-    if (quickDate !== 'ALL') {
-      if (!a.followupAt) return false;
-      const dt = new Date(a.followupAt);
-      const diffDays = (dt - startOfDay_(now)) / (1000 * 60 * 60 * 24);
-      if (quickDate === 'TODAY') {
-        if (!sameDay_(dt, now)) return false;
-      } else if (quickDate === 'NEXT7') {
-        if (diffDays < 0 || diffDays > 7) return false;
-      } else if (quickDate === 'PAST') {
-        if (dt >= startOfDay_(now)) return false;
+function startCountdownTimer() {
+  if (countdownInterval) clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    const cards = document.querySelectorAll('.followup-card');
+    const now = Date.now();
+    cards.forEach(card => {
+      const dueMs = Number(card.dataset.dueMs || '0');
+      const el = card.querySelector('.countdown-text');
+      if (!dueMs || !el) return;
+      const diff = dueMs - now;
+      if (diff <= 0) {
+        el.textContent = 'Overdue';
+        card.classList.add('overdue');
+      } else {
+        el.textContent = formatDiff(diff);
       }
-    }
-
-    return true;
-  });
-
-  items.sort((a, b) => (a.followupAt || '').localeCompare(b.followupAt || ''));
-
-  followupsList.innerHTML = '';
-  if (!items.length) {
-    followupsList.innerHTML = `<div class="list-item"><div class="list-item-sub">No follow ups found.</div></div>`;
-    return;
-  }
-
-  items.forEach(a => {
-    const card = document.createElement('div');
-    card.className = 'list-item';
-
-    const header = document.createElement('div');
-    header.className = 'list-item-header';
-
-    const left = document.createElement('div');
-    const title = document.createElement('div');
-    title.className = 'list-item-title';
-    title.textContent = a.clientName || '(No name)';
-    const sub = document.createElement('div');
-    sub.className = 'list-item-sub';
-
-    let line = a.type === 'CALL'
-      ? (a.mobile ? `📞 ${a.mobile}` : 'Call')
-      : (a.station ? `📍 ${a.station}` : 'Visit');
-
-    if (a.followupAt) {
-      const dt = new Date(a.followupAt);
-      line += ` • ${dt.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
-    }
-
-    sub.textContent = line;
-
-    left.appendChild(title);
-    left.appendChild(sub);
-
-    const right = document.createElement('div');
-
-    const badgeType = document.createElement('button');
-    badgeType.type = 'button';
-    badgeType.className = 'badge badge-type-action ' + (a.type === 'CALL' ? 'badge-call' : 'badge-visit');
-    badgeType.textContent = a.type === 'CALL' ? 'Call' : 'Visit';
-
-    badgeType.dataset.type = a.type || 'CALL';
-    badgeType.dataset.clientName = a.clientName || '';
-    badgeType.dataset.mobile = a.mobile || '';
-    badgeType.dataset.station = a.station || '';
-    badgeType.dataset.shortAddress = a.shortAddress || '';
-    badgeType.dataset.parentId = a.id || '';
-
-    const badgeStatus = document.createElement('span');
-    badgeStatus.className = 'badge ' + getStatusBadgeClass_(a.status);
-    badgeStatus.textContent = statusLabel_(a.status);
-
-    right.appendChild(badgeType);
-    right.appendChild(badgeStatus);
-
-    header.appendChild(left);
-    header.appendChild(right);
-
-    const remark = document.createElement('div');
-    remark.className = 'list-item-sub';
-    remark.textContent = a.remark || 'No remark';
-
-    card.appendChild(header);
-    card.appendChild(remark);
-    followupsList.appendChild(card);
-  });
+    });
+  }, 1000);
 }
 
-function renderAllActivities() {
-  const { globalStatus, quickDate, searchClient } = state.filters;
-  const now = new Date();
-
-  const items = state.activities.filter(a => {
-    if (globalStatus !== 'ALL' && a.status !== globalStatus) return false;
-
-    if (searchClient && !String(a.clientName || '').toLowerCase().includes(searchClient)) return false;
-
-    if (quickDate !== 'ALL') {
-      if (!a.followupAt) return false;
-      const dt = new Date(a.followupAt);
-      const diffDays = (dt - startOfDay_(now)) / (1000 * 60 * 60 * 24);
-      if (quickDate === 'TODAY') {
-        if (!sameDay_(dt, now)) return false;
-      } else if (quickDate === 'NEXT7') {
-        if (diffDays < 0 || diffDays > 7) return false;
-      } else if (quickDate === 'PAST') {
-        if (dt >= startOfDay_(now)) return false;
-      }
-    }
-
-    return true;
-  });
-
-  items.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
-
-  allActivitiesList.innerHTML = '';
-  if (!items.length) {
-    allActivitiesList.innerHTML = `<div class="list-item"><div class="list-item-sub">No activities yet.</div></div>`;
-    return;
-  }
-
-  items.forEach(a => {
-    const card = document.createElement('div');
-    card.className = 'list-item';
-
-    const header = document.createElement('div');
-    header.className = 'list-item-header';
-
-    const left = document.createElement('div');
-    const title = document.createElement('div');
-    title.className = 'list-item-title';
-    title.textContent = a.clientName || '(No name)';
-    const sub = document.createElement('div');
-    sub.className = 'list-item-sub';
-
-    const ts = a.timestamp
-      ? new Date(a.timestamp).toLocaleString('en-IN', {
-          day: '2-digit',
-          month: 'short',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      : '';
-
-    let line = ts;
-    if (a.type === 'CALL' && a.mobile) {
-      line += ` • 📞 ${a.mobile}`;
-    } else if (a.type === 'VISIT' && a.station) {
-      line += ` • 📍 ${a.station}`;
-    }
-    sub.textContent = line;
-
-    left.appendChild(title);
-    left.appendChild(sub);
-
-    const right = document.createElement('div');
-    const badgeType = document.createElement('span');
-    badgeType.className = 'badge ' + (a.type === 'CALL' ? 'badge-call' : 'badge-visit');
-    badgeType.textContent = a.type === 'CALL' ? 'Call' : 'Visit';
-
-    const badgeStatus = document.createElement('span');
-    badgeStatus.className = 'badge ' + getStatusBadgeClass_(a.status);
-    badgeStatus.textContent = statusLabel_(a.status);
-
-    right.appendChild(badgeType);
-    right.appendChild(badgeStatus);
-
-    header.appendChild(left);
-    header.appendChild(right);
-
-    const remark = document.createElement('div');
-    remark.className = 'list-item-sub';
-    remark.textContent = a.remark || 'No remark';
-
-    card.appendChild(header);
-    card.appendChild(remark);
-
-    allActivitiesList.appendChild(card);
-  });
+function formatDueLabel(dueMs) {
+  if (!dueMs) return 'No date';
+  const diff = dueMs - Date.now();
+  if (diff <= 0) return 'Overdue';
+  return formatDiff(diff);
 }
 
-/************** HELPERS **************/
-function showToast(msg) {
-  toastEl.textContent = msg;
-  toastEl.classList.remove('hidden');
-  clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => {
-    toastEl.classList.add('hidden');
-  }, 2200);
+function formatDiff(diffMs) {
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSeconds / (24 * 3600));
+  const hours = Math.floor((totalSeconds % (24 * 3600)) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d ${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
 }
 
-function getStatusBadgeClass_(status) {
-  switch (status) {
-    case 'MATURE':
-      return 'badge-status-mature';
-    case 'CANCEL':
-      return 'badge-status-cancel';
-    case 'FOLLOWUP':
-      return 'badge-status-follow';
-    case 'NEW':
-    default:
-      return 'badge-status-new';
-  }
-}
+/******** UTILS ********/
 
-function statusLabel_(status) {
-  switch (status) {
-    case 'MATURE':
-      return 'Matured';
-    case 'CANCEL':
-      return 'Cancelled';
-    case 'FOLLOWUP':
-      return 'Follow-up';
-    case 'NEW':
-    default:
-      return 'New';
-  }
-}
-
-function startOfDay_(d) {
-  const c = new Date(d);
-  c.setHours(0, 0, 0, 0);
-  return c;
-}
-
-function sameDay_(a, b) {
-  return a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
+function escapeHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
