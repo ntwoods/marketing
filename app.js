@@ -565,9 +565,16 @@ async function saveActivity() {
 } else if (outcome === 'DEAL_MATURED') {
   const remark = document.getElementById('deal-remark').value.trim();
   const fileInput = document.getElementById('deal-file');
+
   if (fileInput.files.length > 0) {
-    formData.append('file1', fileInput.files[0]); // name doesn't matter, server takes first file
+    const file = fileInput.files[0];
+    // file ko base64 me convert karo
+    const base64 = await fileToBase64(file);
+    formData.append('fileBase64', base64);
+    formData.append('fileName', file.name);
+    formData.append('fileMimeType', file.type || 'application/octet-stream');
   }
+
   formData.append('remark', remark);
   } else if (outcome === 'DEAL_CANCELLED') {
     const remark = document.getElementById('cancel-remark').value.trim();
