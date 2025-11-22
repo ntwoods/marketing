@@ -517,8 +517,8 @@ function fileToBase64(file) {
 async function saveActivity() {
   if (!currentUser) return;
 
-  const activityType = getSelectedActivityType(); // CALL / VISIT
-  const outcome = getSelectedOutcome();           // FOLLOW_UP / DEAL_MATURED / DEAL_CANCELLED
+  const activityType = getSelectedActivityType();   // CALL / VISIT
+  const outcome      = getSelectedOutcome();        // FOLLOW_UP / DEAL_MATURED / DEAL_CANCELLED
 
   const clientName = document.getElementById('client-name').value.trim();
   const mobile     = document.getElementById('client-mobile').value.trim();
@@ -530,23 +530,26 @@ async function saveActivity() {
     return;
   }
 
-  // Base payload (JSON object)
-  const payload = {
-    action: 'logActivity',
-    email: currentUser.email,
-    userName: currentUser.name || '',
-    activityType,
-    clientName,
-    mobile,
-    station,
-    address,
-    outcome
-  };
+  // 👉 yahi cheez missing thi:
+  const formData = new FormData();
 
-  if (completingFollowup) {
-    payload.followupId = completingFollowup.id;
+  // Common fields
+  formData.append('action', 'logActivity');
+  formData.append('email', currentUser.email);
+  formData.append('userName', currentUser.name || '');
+  formData.append('activityType', activityType);
+  formData.append('clientName', clientName);
+  formData.append('mobile', mobile);
+  formData.append('station', station);
+  formData.append('address', address);
+  formData.append('outcome', outcome);
+
+  // Agar followup se aa rahe hain to uska ID bhi bhejo
+  if (completingFollowup && completingFollowup.id) {
+    formData.append('followupId', completingFollowup.id);
   }
 
+  // ---- Outcome wise extra fields ----
   if (outcome === 'FOLLOW_UP') {
     const remark = document.getElementById('followup-remark').value.trim();
     const dtStr  = document.getElementById('followup-datetime').value;
@@ -556,6 +559,7 @@ async function saveActivity() {
       alert('Next follow up date & time required.');
       return;
     }
+
     const dt = new Date(dtStr);
     const ms = dt.getTime();
     if (!ms || isNaN(ms)) {
@@ -563,23 +567,19 @@ async function saveActivity() {
       return;
     }
 
-    payload.remark = remark;
-    payload.nextActionType = nextAction;
-    payload.nextFollowupTs = String(ms);
+    formData.append('remark', remark);
+    formData.append('nextActionType', nextAction);     // CALL / VISIT
+    formData.append('nextFollowupTs', String(ms));     // ms since epoch
 
   } else if (outcome === 'DEAL_MATURED') {
-    const remark = document.getElementById('deal-remark').value.trim();
+    const remark    = document.getElementById('deal-remark').value.trim();
     const fileInput = document.getElementById('deal-file');
 
-    payload.remark = remark;
+    formData.append('remark', remark);
 
+    // sirf ek hi file expect kar rahe hain
     if (fileInput.files.length > 0) {
-      const file = fileInput.files[0];
-      // file ko base64 me convert karo
-      const base64 = await fileToBase64(file);
-      payload.fileBase64  = base64;
-      payload.fileName    = file.name;
-      payload.fileMimeType = file.type || 'application/octet-stream';
+      formData.append('file1', fileInput.files[0]);    // Apps Script side: e.files se pehla blob uthayenge
     }
 
   } else if (outcome === 'DEAL_CANCELLED') {
@@ -588,25 +588,23 @@ async function saveActivity() {
       alert('Please add cancellation remark.');
       return;
     }
-    payload.remark = remark;
+    formData.append('remark', remark);
   }
 
+  // ---- Actual POST call ----
   try {
     document.getElementById('btn-save-activity').disabled = true;
 
-    // IMPORTANT:
-    // no-cors lagaya hai taaki Google Apps Script ke preflight / CORS se panga na ho.
-    // Is mode me response opaque hota hai, isliye hum res.json() ya res.status use Nahi karenge.
+    // yahan res.json() / status check nahi kar rahe, kyunki no-cors me opaque response aata hai
     await fetch(API_BASE, {
       method: 'POST',
       mode: 'no-cors',
       body: formData
     });
 
-    // Yahan tak agar koi error nahi aaya, hum assume karte hain request gaya.
     closeActivityModal();
 
-    // Thoda gap dekar backend ko time mile aur phir fresh data le aao
+    // backend ko thoda time dekar fresh data laa lete hain
     await Promise.all([
       refreshFollowups(),
       refreshActivities(),
