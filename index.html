@@ -2,226 +2,213 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Sales Activity Tracker</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <title>Marketing Visits Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- API URL ko apne Apps Script deployment ke hisaab se change kar lena -->
-  <div id="app" data-api-url="https://script.google.com/macros/s/AKfycbycDD2q3insFXlSziXk66mpXgS72NiMIzacZ8qA-lfQRxa5VItZ4NjI4cnjFTcIjq_fag/exec">
-    <!-- Top Bar -->
-    <header class="app-header">
-      <div class="app-title">
-        <span class="app-logo">SA</span>
+  <div id="app">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="screen active">
+      <div class="login-card">
+        <h1>Marketing Activity App</h1>
+        <p>Sign in with your NT Woods Google account</p>
+        <div id="g_id_onload"
+          data-client_id="360849757137-agopfs0m8rgmcj541ucpg22btep5olt3.apps.googleusercontent.com"
+          data-context="signin"
+          data-ux_mode="popup"
+          data-callback="handleGoogleCredential"
+          data-auto_prompt="false">
+        </div>
+        <div class="g_id_signin"
+          data-type="standard"
+          data-shape="pill"
+          data-theme="outline"
+          data-text="continue_with"
+          data-size="large"
+          data-logo_alignment="left">
+        </div>
+        <div id="login-error" class="error-msg"></div>
+      </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="main-screen" class="screen">
+      <header class="top-bar">
         <div>
-          <div class="app-name">Sales Activity</div>
-          <div class="app-subtitle">Calls • Visits • Followups</div>
-        </div>
-      </div>
-      <button id="btnSignOut" class="ghost-btn hidden">Sign out</button>
-    </header>
-
-    <!-- Auth Section -->
-    <main id="authSection" class="screen center-screen">
-      <div class="card">
-        <h1 class="card-title">Welcome</h1>
-        <p class="card-text">
-          Please sign in with your Google account to continue.
-        </p>
-        <div id="g_id_signin"></div>
-        <div id="authMessage" class="auth-message"></div>
-      </div>
-    </main>
-
-    <!-- Main App Section -->
-    <main id="mainSection" class="screen hidden">
-      <!-- User Info -->
-      <section class="user-bar">
-        <div class="user-info">
-          <img id="userAvatar" class="user-avatar" src="" alt="" />
-          <div>
-            <div id="userName" class="user-name"></div>
-            <div id="userEmail" class="user-email"></div>
+          <h2>Marketing Activity App</h2>
+          <div class="subtitle">
+            <span id="user-name"></span> &middot;
+            <span id="user-email"></span>
           </div>
         </div>
-        <div class="user-badges">
-          <span class="chip chip-pill chip-primary" id="chipToday"></span>
-        </div>
-      </section>
+        <button id="btn-logout" class="btn-outline">Logout</button>
+      </header>
 
-      <!-- Tabs -->
-      <section class="tabs">
-        <button class="tab-btn active" data-tab="tabFollowups">Follow Ups</button>
-        <button class="tab-btn" data-tab="tabAll">All Activities</button>
-        <button class="tab-btn" data-tab="tabFilters">Filters</button>
-      </section>
-
-      <!-- Tab: Followups -->
-      <section id="tabFollowups" class="tab-content active">
-        <div class="section-header">
-          <h2>Upcoming & Pending</h2>
-        </div>
-        <div class="filters-row">
-          <select id="followupTypeFilter" class="input">
-            <option value="ALL">All Types</option>
-            <option value="CALL">Calls</option>
-            <option value="VISIT">Visits</option>
-          </select>
-          <select id="followupStatusFilter" class="input">
-            <option value="FOLLOWUP">Follow-ups only</option>
-            <option value="ALL">All</option>
-            <option value="NEW">New</option>
-            <option value="MATURE">Matured</option>
-            <option value="CANCEL">Cancelled</option>
-          </select>
-        </div>
-        <div id="followupsList" class="list"></div>
-      </section>
-
-      <!-- Tab: All Activities -->
-      <section id="tabAll" class="tab-content">
-        <div class="section-header">
-          <h2>All Activities</h2>
-        </div>
-        <div id="allActivitiesList" class="list"></div>
-      </section>
-
-      <!-- Tab: Filters -->
-      <section id="tabFilters" class="tab-content">
-        <div class="section-header">
-          <h2>Quick Filters</h2>
-        </div>
-        <div class="filters-grid">
-          <div class="filter-card">
-            <label>Date Range (client side)</label>
-            <select id="quickDateFilter" class="input">
-              <option value="ALL">All</option>
-              <option value="TODAY">Today</option>
-              <option value="NEXT7">Next 7 days</option>
-              <option value="PAST">Past Due</option>
-            </select>
-          </div>
-          <div class="filter-card">
-            <label>Status</label>
-            <select id="globalStatusFilter" class="input">
-              <option value="ALL">All</option>
-              <option value="NEW">New</option>
-              <option value="FOLLOWUP">In Process (Followup)</option>
-              <option value="MATURE">Matured</option>
-              <option value="CANCEL">Cancelled</option>
-            </select>
-          </div>
-          <div class="filter-card">
-            <label>Search Client</label>
-            <input id="searchClient" class="input" placeholder="Type client name..." />
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <!-- Floating New Activity Button -->
-    <button id="btnNewActivity" class="fab hidden">+</button>
-
-    <!-- Bottom Navigation -->
-    <nav id="bottomNav" class="bottom-nav hidden">
-      <button class="bottom-nav-btn active" data-tab="tabFollowups">
-        <span>Follow Ups</span>
-      </button>
-      <button class="bottom-nav-btn" data-tab="tabAll">
-        <span>Activities</span>
-      </button>
-      <button class="bottom-nav-btn" data-tab="tabFilters">
-        <span>Filters</span>
-      </button>
-    </nav>
-
-    <!-- New Activity Modal -->
-    <div id="activityModal" class="modal hidden">
-      <div class="modal-backdrop"></div>
-      <div class="modal-body">
-        <header class="modal-header">
-          <h2>New Activity</h2>
-          <button id="btnCloseModal" class="icon-btn">&times;</button>
-        </header>
-
-        <!-- Activity Type Switch -->
-        <div class="type-switch">
-          <button class="type-btn active" data-type="CALL">Call</button>
-          <button class="type-btn" data-type="VISIT">Visit</button>
-        </div>
-
-        <!-- Common Fields -->
-        <div class="form-group">
-          <label>Client Name</label>
-          <input id="fieldClientName" class="input" placeholder="Client Name" />
-        </div>
-
-        <div id="callFields" class="type-fields">
-          <div class="form-group">
-            <label>Mobile No.</label>
-            <input id="fieldMobile" class="input" maxlength="10" placeholder="10 digit mobile" />
-          </div>
-        </div>
-
-        <div id="visitFields" class="type-fields hidden">
-          <div class="form-group">
-            <label>Station</label>
-            <input id="fieldStation" class="input" placeholder="City / Station" />
-          </div>
-          <div class="form-group">
-            <label>Short Address</label>
-            <input id="fieldShortAddress" class="input" placeholder="Short Address" />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Remark</label>
-          <textarea id="fieldRemark" class="input" rows="3" placeholder="Write your remark..."></textarea>
-        </div>
-
-        <!-- Followup DateTime -->
-        <div id="followupFields" class="form-group hidden">
-          <label>Follow Up Date &amp; Time</label>
-          <input id="fieldFollowupAt" class="input" type="datetime-local" />
-        </div>
-
-        <!-- Membership Form (Deal Mature) – UPDATED -->
-        <div id="membershipSection" class="membership hidden">
-          <h3>Association Membership</h3>
-          <div class="form-group">
-            <label>Company Name</label>
-            <input id="fieldCompanyName" class="input" placeholder="Company Name" />
-          </div>
-          <div class="form-group">
-            <label>Membership Association Form(s)</label>
-            <input
-              id="fieldMembershipFiles"
-              class="input"
-              type="file"
-              multiple
-            />
-            <div class="form-hint">
-              You can attach multiple files (any type).
+      <!-- STATS BARS -->
+      <section class="stats-section">
+        <div class="stats-card">
+          <h3>Follow Ups</h3>
+          <div class="stats-row">
+            <div class="stat-pill stat-overdue">
+              Overdue: <span id="stat-overdue">0</span>
+            </div>
+            <div class="stat-pill">
+              Today: <span id="stat-today">0</span>
             </div>
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="btn-row">
-          <button id="btnDealCancel" class="btn btn-danger">Deal Cancel</button>
-          <button id="btnFollowup" class="btn btn-secondary">Follow Up Required</button>
-          <button id="btnDealMature" class="btn btn-primary">Deal Mature</button>
+        <div class="stats-card">
+          <h3>All Activities</h3>
+          <div class="stats-row">
+            <div class="stat-pill">
+              Deal Matured: <span id="stat-matured">0</span>
+            </div>
+            <div class="stat-pill stat-cancelled">
+              Deal Cancelled: <span id="stat-cancelled">0</span>
+            </div>
+          </div>
         </div>
-        <div id="modalError" class="form-error"></div>
+      </section>
+
+      <!-- TABS -->
+      <section class="tabs">
+        <button id="tab-followups" class="tab active">Follow Ups</button>
+        <button id="tab-activities" class="tab">All Activities</button>
+      </section>
+
+      <!-- FILTERS -->
+      <section class="filters">
+        <div class="filter-group">
+          <input type="text" id="search-input" placeholder="Search by client / station..." />
+        </div>
+        <div class="filter-group" id="filter-followup-container">
+          <select id="followup-filter">
+            <option value="ALL">All</option>
+            <option value="OVERDUE">Overdue</option>
+            <option value="TODAY">Today</option>
+            <option value="UPCOMING">Upcoming</option>
+          </select>
+        </div>
+        <div class="filter-group hidden" id="filter-activity-container">
+          <select id="activity-filter">
+            <option value="ALL">All Outcomes</option>
+            <option value="FOLLOW_UP">Follow Up</option>
+            <option value="DEAL_MATURED">Deal Matured</option>
+            <option value="DEAL_CANCELLED">Deal Cancelled</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- CONTENT LISTS -->
+      <main class="content">
+        <div id="followups-list" class="list active"></div>
+        <div id="activities-list" class="list"></div>
+      </main>
+
+      <!-- FLOATING ADD BUTTON -->
+      <button id="btn-add" class="fab">+</button>
+    </div>
+
+    <!-- ACTIVITY MODAL -->
+    <div id="activity-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <h3 id="modal-title">Add Activity</h3>
+
+        <div class="toggle-row" id="activity-type-toggle">
+          <button data-type="CALL" class="toggle-btn active">Call</button>
+          <button data-type="VISIT" class="toggle-btn">Visit</button>
+        </div>
+
+        <div class="form-group">
+          <label>Client Name</label>
+          <input type="text" id="client-name" />
+        </div>
+        <div class="form-group">
+          <label>Mobile No.</label>
+          <input type="text" id="client-mobile" />
+        </div>
+        <div class="form-group">
+          <label>Station</label>
+          <input type="text" id="client-station" />
+        </div>
+        <div class="form-group" id="address-group">
+          <label>Address (short)</label>
+          <input type="text" id="client-address" />
+        </div>
+
+        <h4>Outcome</h4>
+        <div class="toggle-row">
+          <button data-outcome="FOLLOW_UP" class="toggle-btn outcome-btn active">Follow Up Required</button>
+          <button data-outcome="DEAL_MATURED" class="toggle-btn outcome-btn">Deal Matured</button>
+          <button data-outcome="DEAL_CANCELLED" class="toggle-btn outcome-btn">Deal Cancelled</button>
+        </div>
+
+        <!-- FOLLOW UP EXTRA FIELDS -->
+        <div id="followup-extra">
+          <div class="form-group">
+            <label>Remark</label>
+            <textarea id="followup-remark" rows="2"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Next Follow Up Date &amp; Time</label>
+              <input type="datetime-local" id="followup-datetime" />
+            </div>
+            <div class="form-group">
+              <label>Next Action</label>
+              <select id="followup-next-action">
+                <option value="CALL">Call</option>
+                <option value="VISIT">Visit</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- DEAL MATURED EXTRA -->
+        <div id="deal-mature-extra" class="hidden">
+          <div class="form-group">
+            <label>Dealer Association Form (file)</label>
+            <input type="file" id="deal-file" />
+          </div>
+          <div class="form-group">
+            <label>Remark (optional)</label>
+            <textarea id="deal-remark" rows="2"></textarea>
+          </div>
+        </div>
+
+        <!-- DEAL CANCELLED EXTRA -->
+        <div id="deal-cancel-extra" class="hidden">
+          <div class="form-group">
+            <label>Cancellation Remark</label>
+            <textarea id="cancel-remark" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-cancel-modal" class="btn-outline">Cancel</button>
+          <button id="btn-save-activity" class="btn-primary">Save</button>
+        </div>
       </div>
     </div>
 
-    <!-- Toast Notification -->
-    <div id="toast" class="toast hidden"></div>
+    <!-- HISTORY MODAL -->
+    <div id="history-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content history-modal-content">
+        <h3 id="history-title">Client History</h3>
+        <div id="history-list" class="history-list"></div>
+        <div class="modal-actions">
+          <button id="btn-close-history" class="btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="app.js"></script>
