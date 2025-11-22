@@ -494,27 +494,8 @@ function syncOutcomeUI() {
 
 
 
-/******** SAVE ACTIVITY ********/
-
-// 👇 ye helper add karo (saveActivity se just upar)
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result || '';
-      // "data:...;base64,AAAA" se sirf base64 part nikalo
-      const parts = String(result).split(',');
-      resolve(parts.length > 1 ? parts[1] : '');
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-
-
-
-// Replace your entire saveActivity() function with this:
+// Replace your entire saveActivity() function with this version
+// Includes console logging for debugging
 
 async function saveActivity() {
   if (!currentUser) return;
@@ -532,7 +513,7 @@ async function saveActivity() {
     return;
   }
 
-  // Build JSON payload instead of FormData
+  // Build JSON payload
   const payload = {
     action: 'logActivity',
     email: currentUser.email,
@@ -545,7 +526,7 @@ async function saveActivity() {
     outcome: outcome
   };
 
-  // If completing a followup, include its ID
+  // If completing a followup
   if (completingFollowup && completingFollowup.id) {
     payload.followupId = completingFollowup.id;
   }
@@ -578,18 +559,35 @@ async function saveActivity() {
 
     payload.remark = remark;
 
+    console.log('=== DEAL_MATURED file check ===');
+    console.log('fileInput:', fileInput);
+    console.log('files count:', fileInput.files.length);
+
     // Convert file to Base64 if present
     if (fileInput.files.length > 0) {
       const file = fileInput.files[0];
+      console.log('File selected:', file.name, file.type, file.size, 'bytes');
+      
       try {
         const base64Data = await fileToBase64(file);
+        console.log('Base64 conversion done, length:', base64Data.length);
+        console.log('Base64 preview (first 100 chars):', base64Data.substring(0, 100));
+        
         payload.fileBase64 = base64Data;
         payload.fileName = file.name;
         payload.fileMimeType = file.type || 'application/octet-stream';
+        
+        console.log('Payload file fields set:');
+        console.log('- fileName:', payload.fileName);
+        console.log('- fileMimeType:', payload.fileMimeType);
+        console.log('- fileBase64 length:', payload.fileBase64.length);
       } catch (err) {
+        console.error('File read error:', err);
         alert('Error reading file: ' + err.message);
         return;
       }
+    } else {
+      console.log('No file selected');
     }
 
   } else if (outcome === 'DEAL_CANCELLED') {
@@ -601,6 +599,14 @@ async function saveActivity() {
     payload.remark = remark;
   }
 
+  // Debug: log full payload (truncate base64 for readability)
+  const debugPayload = { ...payload };
+  if (debugPayload.fileBase64) {
+    debugPayload.fileBase64 = debugPayload.fileBase64.substring(0, 50) + '... [truncated, total length: ' + payload.fileBase64.length + ']';
+  }
+  console.log('=== Sending payload ===');
+  console.log(JSON.stringify(debugPayload, null, 2));
+
   // POST as JSON
   try {
     document.getElementById('btn-save-activity').disabled = true;
@@ -608,20 +614,31 @@ async function saveActivity() {
     const res = await fetch(API_BASE, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain'  // Apps Script handles this better
+        'Content-Type': 'text/plain'
       },
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
+    console.log('Response status:', res.status);
     
+    const data = await res.json();
+    console.log('=== Response from server ===');
+    console.log(JSON.stringify(data, null, 2));
+
     if (!data.ok) {
       throw new Error(data.error || 'Unknown error');
     }
 
+    // Show file debug info if present
+    if (data.fileDebug) {
+      console.log('File debug from server:', data.fileDebug);
+    }
+    if (data.attachmentUrl) {
+      console.log('Attachment URL:', data.attachmentUrl);
+    }
+
     closeActivityModal();
 
-    // Refresh data
     await Promise.all([
       refreshFollowups(),
       refreshActivities(),
@@ -630,10 +647,32 @@ async function saveActivity() {
 
     completingFollowup = null;
   } catch (err) {
+    console.error('Save error:', err);
     alert('Error saving activity: ' + err.message);
   } finally {
     document.getElementById('btn-save-activity').disabled = false;
   }
+}
+
+// Ensure this helper exists and works correctly
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result || '';
+      // Extract base64 part from "data:mime/type;base64,XXXXX"
+      const base64Match = String(result).match(/^data:[^;]+;base64,(.+)$/);
+      if (base64Match && base64Match[1]) {
+        resolve(base64Match[1]);
+      } else {
+        // Fallback: split by comma
+        const parts = String(result).split(',');
+        resolve(parts.length > 1 ? parts[1] : '');
+      }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
 }
 /******** COUNTDOWN TIMER ********/
 
