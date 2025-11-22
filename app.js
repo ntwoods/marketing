@@ -1,7 +1,7 @@
 /******** CONFIG ********/
 
 // 👇 Yahan tumhein apna Apps Script Web App URL daalna hai
-const API_BASE = 'https://script.google.com/macros/s/AKfycbwwFA3bfN1THg31sTvKcl7fCm5QTzvWSTYYuWPC-xO4dciiml4SEaA7NNQQ8Al0nrpE0A/exec';
+const API_BASE = 'https://script.google.com/macros/s/AKfycbzPYsWmdrcGUUtna8E1Onkh5TkT3XcrjPz1U1AEd2TdPRwsXXoI5yZ8mcQaLXzkhpZSpA/exec';
 
 let currentUser = null;
 let bootstrapData = {
@@ -594,22 +594,25 @@ async function saveActivity() {
   try {
     document.getElementById('btn-save-activity').disabled = true;
 
-    const res = await fetch(API_BASE, {
+    // IMPORTANT:
+    // no-cors lagaya hai taaki Google Apps Script ke preflight / CORS se panga na ho.
+    // Is mode me response opaque hota hai, isliye hum res.json() ya res.status use Nahi karenge.
+    await fetch(API_BASE, {
       method: 'POST',
-      body: JSON.stringify(payload)
+      mode: 'no-cors',
+      body: formData
     });
 
-    const data = await res.json();
-    if (!data.ok) {
-      throw new Error(data.error || 'API error');
-    }
-
+    // Yahan tak agar koi error nahi aaya, hum assume karte hain request gaya.
     closeActivityModal();
+
+    // Thoda gap dekar backend ko time mile aur phir fresh data le aao
     await Promise.all([
       refreshFollowups(),
       refreshActivities(),
       fetchBootstrap()
     ]);
+
     completingFollowup = null;
   } catch (err) {
     alert('Error saving activity: ' + err.message);
