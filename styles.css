@@ -36,10 +36,15 @@ body {
 
 #login-screen {
   min-height: 100vh;
+}
+
+/* Sirf jab active ho tabhi flex */
+#login-screen.screen.active {
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 
 .login-card {
   background: var(--card-bg);
