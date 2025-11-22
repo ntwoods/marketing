@@ -598,7 +598,6 @@ async function saveActivity() {
     // yahan res.json() / status check nahi kar rahe, kyunki no-cors me opaque response aata hai
     await fetch(API_BASE, {
       method: 'POST',
-      mode: 'no-cors',
       body: formData
     });
 
