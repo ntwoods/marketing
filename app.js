@@ -514,45 +514,46 @@ function fileToBase64(file) {
 
 
 
+// Replace your entire saveActivity() function with this:
+
 async function saveActivity() {
   if (!currentUser) return;
 
-  const activityType = getSelectedActivityType();   // CALL / VISIT
-  const outcome      = getSelectedOutcome();        // FOLLOW_UP / DEAL_MATURED / DEAL_CANCELLED
+  const activityType = getSelectedActivityType();
+  const outcome = getSelectedOutcome();
 
   const clientName = document.getElementById('client-name').value.trim();
-  const mobile     = document.getElementById('client-mobile').value.trim();
-  const station    = document.getElementById('client-station').value.trim();
-  const address    = document.getElementById('client-address').value.trim();
+  const mobile = document.getElementById('client-mobile').value.trim();
+  const station = document.getElementById('client-station').value.trim();
+  const address = document.getElementById('client-address').value.trim();
 
   if (!clientName || !mobile) {
     alert('Client name and mobile are required.');
     return;
   }
 
-  // 👉 yahi cheez missing thi:
-  const formData = new FormData();
+  // Build JSON payload instead of FormData
+  const payload = {
+    action: 'logActivity',
+    email: currentUser.email,
+    userName: currentUser.name || '',
+    activityType: activityType,
+    clientName: clientName,
+    mobile: mobile,
+    station: station,
+    address: address,
+    outcome: outcome
+  };
 
-  // Common fields
-  formData.append('action', 'logActivity');
-  formData.append('email', currentUser.email);
-  formData.append('userName', currentUser.name || '');
-  formData.append('activityType', activityType);
-  formData.append('clientName', clientName);
-  formData.append('mobile', mobile);
-  formData.append('station', station);
-  formData.append('address', address);
-  formData.append('outcome', outcome);
-
-  // Agar followup se aa rahe hain to uska ID bhi bhejo
+  // If completing a followup, include its ID
   if (completingFollowup && completingFollowup.id) {
-    formData.append('followupId', completingFollowup.id);
+    payload.followupId = completingFollowup.id;
   }
 
-  // ---- Outcome wise extra fields ----
+  // Outcome-specific fields
   if (outcome === 'FOLLOW_UP') {
     const remark = document.getElementById('followup-remark').value.trim();
-    const dtStr  = document.getElementById('followup-datetime').value;
+    const dtStr = document.getElementById('followup-datetime').value;
     const nextAction = document.getElementById('followup-next-action').value;
 
     if (!dtStr) {
@@ -567,19 +568,28 @@ async function saveActivity() {
       return;
     }
 
-    formData.append('remark', remark);
-    formData.append('nextActionType', nextAction);     // CALL / VISIT
-    formData.append('nextFollowupTs', String(ms));     // ms since epoch
+    payload.remark = remark;
+    payload.nextActionType = nextAction;
+    payload.nextFollowupTs = String(ms);
 
   } else if (outcome === 'DEAL_MATURED') {
-    const remark    = document.getElementById('deal-remark').value.trim();
+    const remark = document.getElementById('deal-remark').value.trim();
     const fileInput = document.getElementById('deal-file');
 
-    formData.append('remark', remark);
+    payload.remark = remark;
 
-    // sirf ek hi file expect kar rahe hain
+    // Convert file to Base64 if present
     if (fileInput.files.length > 0) {
-      formData.append('file1', fileInput.files[0]);    // Apps Script side: e.files se pehla blob uthayenge
+      const file = fileInput.files[0];
+      try {
+        const base64Data = await fileToBase64(file);
+        payload.fileBase64 = base64Data;
+        payload.fileName = file.name;
+        payload.fileMimeType = file.type || 'application/octet-stream';
+      } catch (err) {
+        alert('Error reading file: ' + err.message);
+        return;
+      }
     }
 
   } else if (outcome === 'DEAL_CANCELLED') {
@@ -588,23 +598,30 @@ async function saveActivity() {
       alert('Please add cancellation remark.');
       return;
     }
-    formData.append('remark', remark);
+    payload.remark = remark;
   }
 
-  // ---- Actual POST call ----
+  // POST as JSON
   try {
     document.getElementById('btn-save-activity').disabled = true;
 
-    // yahan res.json() / status check nahi kar rahe, kyunki no-cors me opaque response aata hai
-    await fetch(API_BASE, {
+    const res = await fetch(API_BASE, {
       method: 'POST',
-      mode: 'no-cors',
-      body: formData
+      headers: {
+        'Content-Type': 'text/plain'  // Apps Script handles this better
+      },
+      body: JSON.stringify(payload)
     });
+
+    const data = await res.json();
+    
+    if (!data.ok) {
+      throw new Error(data.error || 'Unknown error');
+    }
 
     closeActivityModal();
 
-    // backend ko thoda time dekar fresh data laa lete hain
+    // Refresh data
     await Promise.all([
       refreshFollowups(),
       refreshActivities(),
@@ -618,7 +635,6 @@ async function saveActivity() {
     document.getElementById('btn-save-activity').disabled = false;
   }
 }
-
 /******** COUNTDOWN TIMER ********/
 
 function startCountdownTimer() {
