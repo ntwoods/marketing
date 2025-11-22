@@ -521,33 +521,35 @@ async function saveActivity() {
   const outcome = getSelectedOutcome();           // FOLLOW_UP / DEAL_MATURED / DEAL_CANCELLED
 
   const clientName = document.getElementById('client-name').value.trim();
-  const mobile = document.getElementById('client-mobile').value.trim();
-  const station = document.getElementById('client-station').value.trim();
-  const address = document.getElementById('client-address').value.trim();
+  const mobile     = document.getElementById('client-mobile').value.trim();
+  const station    = document.getElementById('client-station').value.trim();
+  const address    = document.getElementById('client-address').value.trim();
 
   if (!clientName || !mobile) {
     alert('Client name and mobile are required.');
     return;
   }
 
-  const formData = new FormData();
-  formData.append('action', 'logActivity');
-  formData.append('email', currentUser.email);
-  formData.append('userName', currentUser.name || '');
-  formData.append('activityType', activityType);
-  formData.append('clientName', clientName);
-  formData.append('mobile', mobile);
-  formData.append('station', station);
-  formData.append('address', address);
-  formData.append('outcome', outcome);
+  // Base payload (JSON object)
+  const payload = {
+    action: 'logActivity',
+    email: currentUser.email,
+    userName: currentUser.name || '',
+    activityType,
+    clientName,
+    mobile,
+    station,
+    address,
+    outcome
+  };
 
   if (completingFollowup) {
-    formData.append('followupId', completingFollowup.id);
+    payload.followupId = completingFollowup.id;
   }
 
   if (outcome === 'FOLLOW_UP') {
     const remark = document.getElementById('followup-remark').value.trim();
-    const dtStr = document.getElementById('followup-datetime').value;
+    const dtStr  = document.getElementById('followup-datetime').value;
     const nextAction = document.getElementById('followup-next-action').value;
 
     if (!dtStr) {
@@ -561,43 +563,56 @@ async function saveActivity() {
       return;
     }
 
-    formData.append('remark', remark);
-    formData.append('nextActionType', nextAction);
-    formData.append('nextFollowupTs', String(ms));
-} else if (outcome === 'DEAL_MATURED') {
-  const remark = document.getElementById('deal-remark').value.trim();
-  const fileInput = document.getElementById('deal-file');
+    payload.remark = remark;
+    payload.nextActionType = nextAction;
+    payload.nextFollowupTs = String(ms);
 
-  if (fileInput.files.length > 0) {
-    const file = fileInput.files[0];
-    // file ko base64 me convert karo
-    const base64 = await fileToBase64(file);
-    formData.append('fileBase64', base64);
-    formData.append('fileName', file.name);
-    formData.append('fileMimeType', file.type || 'application/octet-stream');
-  }
-  formData.append('remark', remark);
+  } else if (outcome === 'DEAL_MATURED') {
+    const remark = document.getElementById('deal-remark').value.trim();
+    const fileInput = document.getElementById('deal-file');
+
+    payload.remark = remark;
+
+    if (fileInput.files.length > 0) {
+      const file = fileInput.files[0];
+      // file ko base64 me convert karo
+      const base64 = await fileToBase64(file);
+      payload.fileBase64  = base64;
+      payload.fileName    = file.name;
+      payload.fileMimeType = file.type || 'application/octet-stream';
+    }
+
   } else if (outcome === 'DEAL_CANCELLED') {
     const remark = document.getElementById('cancel-remark').value.trim();
     if (!remark) {
       alert('Please add cancellation remark.');
       return;
     }
-    formData.append('remark', remark);
+    payload.remark = remark;
   }
 
   try {
     document.getElementById('btn-save-activity').disabled = true;
+
     const res = await fetch(API_BASE, {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
     });
+
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'API error');
+    if (!data.ok) {
+      throw new Error(data.error || 'API error');
+    }
 
     closeActivityModal();
-    // Refresh data
-    await Promise.all([refreshFollowups(), refreshActivities(), fetchBootstrap()]);
+    await Promise.all([
+      refreshFollowups(),
+      refreshActivities(),
+      fetchBootstrap()
+    ]);
     completingFollowup = null;
   } catch (err) {
     alert('Error saving activity: ' + err.message);
@@ -605,6 +620,7 @@ async function saveActivity() {
     document.getElementById('btn-save-activity').disabled = false;
   }
 }
+
 /******** COUNTDOWN TIMER ********/
 
 function startCountdownTimer() {
