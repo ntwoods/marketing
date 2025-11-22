@@ -490,7 +490,27 @@ function syncOutcomeUI() {
   document.getElementById('deal-cancel-extra').classList.toggle('hidden', outcome !== 'DEAL_CANCELLED');
 }
 
+
+
 /******** SAVE ACTIVITY ********/
+
+// 👇 ye helper add karo (saveActivity se just upar)
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result || '';
+      // "data:...;base64,AAAA" se sirf base64 part nikalo
+      const parts = String(result).split(',');
+      resolve(parts.length > 1 ? parts[1] : '');
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+
+
 
 async function saveActivity() {
   if (!currentUser) return;
