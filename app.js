@@ -619,7 +619,9 @@ function formatDiff(diffMs) {
 /******** UTILS ********/
 
 function escapeHtml(str) {
-  if (!str) return '';
+  if (str === null || str === undefined) return '';
+  // Hamesha string bana lo, chahe number ho ya kuch bhi
+  str = String(str);
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
