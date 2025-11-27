@@ -1,5 +1,3 @@
-/******** CONFIG ********/
-
 // 👇 Yahan tumhein apna Apps Script Web App URL daalna hai
 const API_BASE = 'https://script.google.com/macros/s/AKfycbx8fOs5VGABy4O755VULDkt-SbHBpFYu7BSN3mM61JoxTJBbjf1pfkh8rn9c2KYCG4/exec';
 
@@ -12,6 +10,9 @@ let bootstrapData = {
 let countdownInterval = null;
 let currentTab = 'FOLLOWUPS';
 let completingFollowup = null; // if activity is from followup card
+
+// Weekly Route Plan info (per user)
+let routePlanInfo = null;
 
 /******** GOOGLE SIGN-IN ********/
 
@@ -69,19 +70,39 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('followup-filter').addEventListener('change', renderFollowups);
   document.getElementById('activity-filter').addEventListener('change', renderActivities);
 
-  // FAB
-  document.getElementById('btn-add').addEventListener('click', () => openActivityModal());
+  // FAB (+)
+  document.getElementById('btn-add').addEventListener('click', () => {
+    // Route plan lock check
+    if (routePlanInfo && routePlanInfo.locked) {
+      alert('Station selection locked hai. Pehle Weekly Route plan set karo.');
+      openRoutePlanModal();
+      return;
+    }
+    openActivityModal();
+  });
 
-  // Modal buttons
+  // Route plan button (header)
+  const routeBtn = document.getElementById('btn-route-plan');
+  if (routeBtn) {
+    routeBtn.addEventListener('click', () => openRoutePlanModal());
+  }
+
+  // Activity modal buttons
   document.getElementById('btn-cancel-modal').addEventListener('click', closeActivityModal);
   document.getElementById('btn-save-activity').addEventListener('click', saveActivity);
 
+  // History modal
   document.getElementById('btn-close-history').addEventListener('click', closeHistoryModal);
+
+  // Route plan modal buttons
+  document.getElementById('btn-cancel-routeplan').addEventListener('click', closeRoutePlanModal);
+  document.getElementById('btn-save-routeplan').addEventListener('click', saveRoutePlan);
 
   // Logout
   document.getElementById('btn-logout').addEventListener('click', () => {
     localStorage.removeItem('marketingUser');
     currentUser = null;
+    routePlanInfo = null;
     showScreen('login');
   });
 
@@ -90,10 +111,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      // Visit -> address required, Call -> optional
       const type = btn.dataset.type;
       const addressGroup = document.getElementById('address-group');
-      addressGroup.style.display = type === 'VISIT' ? 'block' : 'block'; // we still show field, but you can enforce required in save
+      addressGroup.style.display = 'block'; // field hamesha dikhana hai
     });
   });
 
@@ -142,8 +162,11 @@ async function fetchBootstrap() {
     bootstrapData.stats = data.stats;
     bootstrapData.followups = data.followups || [];
     bootstrapData.activities = data.activities || [];
+    routePlanInfo = data.routePlan || null;
 
     updateStatsUI();
+    updateRoutePlanBanner();
+    prepareStationOptions();
     renderCurrentTab();
     startCountdownTimer();
   } catch (err) {
@@ -170,6 +193,182 @@ async function refreshActivities() {
     bootstrapData.activities = data.activities || [];
     updateStatsUI();
     if (currentTab === 'ACTIVITIES') renderActivities();
+  }
+}
+
+/******** ROUTE PLAN UI HELPERS ********/
+
+function updateRoutePlanBanner() {
+  const banner = document.getElementById('routeplan-banner');
+  if (!banner) return;
+
+  if (!routePlanInfo) {
+    banner.classList.add('hidden');
+    banner.textContent = '';
+    return;
+  }
+
+  if (routePlanInfo.locked) {
+    banner.classList.remove('hidden');
+    banner.innerHTML = `<strong>Station Locked:</strong> Please set your 7-day route plan using "Weekly Route" button.`;
+  } else {
+    // Abhi station unlocked hai – banner optional
+    banner.classList.add('hidden');
+    banner.textContent = '';
+  }
+}
+
+function prepareStationOptions() {
+  const dl = document.getElementById('station-options');
+  if (!dl) return;
+  dl.innerHTML = '';
+
+  if (!routePlanInfo || !Array.isArray(routePlanInfo.weekPlan)) return;
+
+  const unique = new Set();
+  routePlanInfo.weekPlan.forEach(d => {
+    if (d.station) unique.add(d.station);
+  });
+
+  unique.forEach(st => {
+    const opt = document.createElement('option');
+    opt.value = st;
+    dl.appendChild(opt);
+  });
+}
+
+function openRoutePlanModal() {
+  if (!currentUser) return;
+  const modal = document.getElementById('routeplan-modal');
+  if (!modal) return;
+
+  const today = new Date();
+  const todayDow = today.getDay(); // 0=Sun..6
+  const weekStart = new Date(today);
+
+  // Sunday ko NEXT week (Mon–Sun) ka plan
+  if (todayDow === 0) {
+    weekStart.setDate(weekStart.getDate() + 1); // Monday (kal)
+  } else {
+    const diff = (todayDow + 6) % 7; // Mon->0
+    weekStart.setDate(weekStart.getDate() - diff);
+  }
+
+  const lastDay = new Date(weekStart);
+  lastDay.setDate(weekStart.getDate() + 6);
+
+  const periodEl = document.getElementById('routeplan-period');
+  const helpEl = document.getElementById('routeplan-help');
+  const daysContainer = document.getElementById('routeplan-days');
+
+  if (periodEl) {
+    periodEl.textContent = `Plan for ${formatDateDisplay(weekStart)} to ${formatDateDisplay(lastDay)}`;
+  }
+  if (helpEl) {
+    helpEl.textContent = (todayDow === 0)
+      ? 'You are planning for NEXT week (Mon–Sun) starting tomorrow.'
+      : 'You are planning for THIS week (Mon–Sun).';
+  }
+
+  if (daysContainer) {
+    daysContainer.innerHTML = '';
+    const isCurrentWeek = todayDow !== 0;
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      const dateStr = formatDateYMDLocal(d);
+      const dayNameFull = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+
+      let stationValue = '';
+      if (isCurrentWeek && routePlanInfo && Array.isArray(routePlanInfo.weekPlan)) {
+        const existing = routePlanInfo.weekPlan.find(p => p.dateStr === dateStr);
+        if (existing && existing.station) {
+          stationValue = existing.station;
+        }
+      }
+
+      const row = document.createElement('div');
+      row.className = 'routeplan-row';
+      row.innerHTML = `
+        <div class="routeplan-label">
+          ${dayNameFull}
+          <span class="routeplan-date">${dateStr}</span>
+        </div>
+        <div class="routeplan-input">
+          <input type="text" data-date="${dateStr}" data-dayname="${dayNameFull}" value="${stationValue}">
+        </div>
+      `;
+      daysContainer.appendChild(row);
+    }
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeRoutePlanModal() {
+  const modal = document.getElementById('routeplan-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function saveRoutePlan() {
+  if (!currentUser) return;
+  const inputs = document.querySelectorAll('#routeplan-days input[data-date]');
+  if (!inputs.length) {
+    alert('No days found.');
+    return;
+  }
+
+  const days = [];
+  inputs.forEach(inp => {
+    const dateStr = inp.dataset.date;
+    const dayName = inp.dataset.dayname;
+    const station = (inp.value || '').trim();
+    days.push({ dateStr, dayName, station });
+  });
+
+  // Saare 7 din ke station mandatory
+  const missing = days.find(d => !d.station);
+  if (missing) {
+    alert('Please fill Station for all 7 days.');
+    return;
+  }
+
+  const payload = {
+    action: 'saveRoutePlan',
+    email: currentUser.email,
+    days
+  };
+
+  try {
+    document.getElementById('btn-save-routeplan').disabled = true;
+
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      throw new Error(data.error || 'Route plan save error');
+    }
+
+    // Backend se latest routePlanInfo aa raha hai
+    routePlanInfo = data.routePlan || routePlanInfo;
+    updateRoutePlanBanner();
+    prepareStationOptions();
+
+    closeRoutePlanModal();
+
+    // Optional: followups/activities refresh
+    await fetchBootstrap();
+  } catch (err) {
+    alert('Error saving route plan: ' + err.message);
+  } finally {
+    document.getElementById('btn-save-routeplan').disabled = false;
   }
 }
 
@@ -418,6 +617,13 @@ function closeHistoryModal() {
 /******** UI: Activity Modal ********/
 
 function openActivityModalFromFollowup(f) {
+  // Lock check
+  if (routePlanInfo && routePlanInfo.locked) {
+    alert('Station selection locked hai. Pehle Weekly Route plan set karo.');
+    openRoutePlanModal();
+    return;
+  }
+
   completingFollowup = f;
   openActivityModal({
     clientName: f.clientName,
@@ -438,17 +644,27 @@ function openActivityModal(prefill = {}) {
   // Prefill fields
   document.getElementById('client-name').value = prefill.clientName || '';
   document.getElementById('client-mobile').value = prefill.mobile || '';
-  document.getElementById('client-station').value = prefill.station || '';
+
+  const stationInput = document.getElementById('client-station');
+  if (prefill.station) {
+    stationInput.value = prefill.station;
+    stationInput.placeholder = '';
+  } else if (routePlanInfo && routePlanInfo.todayStation) {
+    stationInput.value = routePlanInfo.todayStation;
+    stationInput.placeholder = `Planned: ${routePlanInfo.todayStation}`;
+  } else {
+    stationInput.value = '';
+    stationInput.placeholder = '';
+  }
+
   document.getElementById('client-address').value = prefill.address || '';
 
-    // Activity type
+  // Activity type
   const typeToSelect = prefill.forceType || 'CALL';
   document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.type === typeToSelect);
-    // Followup se aaye ho tab bhi user ko type change karne do
-    btn.disabled = false;
+    btn.disabled = false; // user ko change karne do
   });
-
 
   // Default outcome: Follow up required
   document.querySelectorAll('.outcome-btn').forEach(btn => {
@@ -499,6 +715,13 @@ function syncOutcomeUI() {
 
 async function saveActivity() {
   if (!currentUser) return;
+
+  // If route plan locked, guard
+  if (routePlanInfo && routePlanInfo.locked) {
+    alert('Station selection locked hai. Pehle Weekly Route plan set karo.');
+    openRoutePlanModal();
+    return;
+  }
 
   const activityType = getSelectedActivityType();
   const outcome = getSelectedOutcome();
@@ -674,6 +897,7 @@ function fileToBase64(file) {
     reader.readAsDataURL(file);
   });
 }
+
 /******** COUNTDOWN TIMER ********/
 
 function startCountdownTimer() {
@@ -722,4 +946,19 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function formatDateYMDLocal(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatDateDisplay(d) {
+  const day = String(d.getDate()).padStart(2, '0');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const m = months[d.getMonth()];
+  const y = d.getFullYear();
+  return `${day} ${m} ${y}`;
 }
