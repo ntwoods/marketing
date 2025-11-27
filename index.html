@@ -45,8 +45,14 @@
             <span id="user-email"></span>
           </div>
         </div>
-        <button id="btn-logout" class="btn-outline">Logout</button>
+        <div class="top-actions">
+          <button id="btn-route-plan" class="btn-outline">Weekly Route</button>
+          <button id="btn-logout" class="btn-outline">Logout</button>
+        </div>
       </header>
+
+      <!-- ROUTE PLAN BANNER -->
+      <div id="routeplan-banner" class="route-banner hidden"></div>
 
       <!-- STATS BARS -->
       <section class="stats-section">
@@ -135,7 +141,9 @@
         </div>
         <div class="form-group">
           <label>Station</label>
-          <input type="text" id="client-station" />
+          <input type="text" id="client-station" list="station-options" />
+          <!-- Station dropdown options from weekly route plan -->
+          <datalist id="station-options"></datalist>
         </div>
         <div class="form-group" id="address-group">
           <label>Address (short)</label>
@@ -205,6 +213,21 @@
         <div id="history-list" class="history-list"></div>
         <div class="modal-actions">
           <button id="btn-close-history" class="btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROUTE PLAN MODAL -->
+    <div id="routeplan-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <h3>Set 7-Day Route Plan</h3>
+        <p id="routeplan-period" class="small-text"></p>
+        <p id="routeplan-help" class="small-text"></p>
+        <div id="routeplan-days"></div>
+        <div class="modal-actions">
+          <button id="btn-cancel-routeplan" class="btn-outline">Cancel</button>
+          <button id="btn-save-routeplan" class="btn-primary">Save Plan</button>
         </div>
       </div>
     </div>
