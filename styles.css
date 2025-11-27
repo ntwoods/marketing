@@ -45,7 +45,6 @@ body {
   justify-content: center;
 }
 
-
 .login-card {
   background: var(--card-bg);
   padding: 24px 20px;
@@ -94,6 +93,13 @@ body {
   color: var(--text-muted);
 }
 
+/* Top actions (route plan + logout) */
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Buttons */
 
 button {
@@ -123,6 +129,22 @@ button {
 
 .btn-outline:active {
   transform: scale(0.97);
+}
+
+/* Route plan banner */
+
+.route-banner {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #facc15;
+}
+
+.route-banner strong {
+  font-weight: 600;
 }
 
 /* Stats */
@@ -446,6 +468,37 @@ button {
   padding: 2px 6px;
   border-radius: 999px;
   background: #e5e7eb;
+}
+
+/* Route plan modal */
+
+.small-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+
+.routeplan-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.routeplan-label {
+  min-width: 120px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.routeplan-label .routeplan-date {
+  display: block;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.routeplan-input {
+  flex: 1;
 }
 
 /* Responsive */
