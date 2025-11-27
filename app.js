@@ -246,7 +246,7 @@ function openRoutePlanModal() {
   const todayDow = today.getDay(); // 0=Sun..6
   const weekStart = new Date(today);
 
-  // Sunday ko NEXT week (Mon–Sun) ka plan
+  // Sunday => NEXT week (Mon–Sun) plan
   if (todayDow === 0) {
     weekStart.setDate(weekStart.getDate() + 1); // Monday (kal)
   } else {
@@ -267,12 +267,13 @@ function openRoutePlanModal() {
   if (helpEl) {
     helpEl.textContent = (todayDow === 0)
       ? 'You are planning for NEXT week (Mon–Sun) starting tomorrow.'
-      : 'You are planning for THIS week (Mon–Sun).';
+      : 'You are viewing/setting plan for THIS week (Mon–Sun).';
   }
 
   if (daysContainer) {
     daysContainer.innerHTML = '';
-    const isCurrentWeek = todayDow !== 0;
+
+    const isCurrentWeek = todayDow !== 0; // Mon–Sat = current week, Sun = next week
 
     for (let i = 0; i < 7; i++) {
       const d = new Date(weekStart);
@@ -281,6 +282,7 @@ function openRoutePlanModal() {
       const dayNameFull = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
 
       let stationValue = '';
+      // Sirf current week ke liye, agar routePlanInfo hai to prefill
       if (isCurrentWeek && routePlanInfo && Array.isArray(routePlanInfo.weekPlan)) {
         const existing = routePlanInfo.weekPlan.find(p => p.dateStr === dateStr);
         if (existing && existing.station) {
@@ -300,6 +302,29 @@ function openRoutePlanModal() {
         </div>
       `;
       daysContainer.appendChild(row);
+    }
+
+    // 🔒 VIEW-ONLY logic for CURRENT WEEK if plan already submitted
+    const saveBtn = document.getElementById('btn-save-routeplan');
+    const cancelBtn = document.getElementById('btn-cancel-routeplan');
+
+    // Default state: editable
+    document.querySelectorAll('#routeplan-days input[data-date]').forEach(inp => {
+      inp.readOnly = false;
+    });
+    if (saveBtn) saveBtn.style.display = '';
+    if (cancelBtn) cancelBtn.textContent = 'Cancel';
+
+    if (isCurrentWeek && routePlanInfo && Array.isArray(routePlanInfo.weekPlan)) {
+      const anyStation = routePlanInfo.weekPlan.some(d => (d.station || '').trim() !== '');
+      if (anyStation) {
+        // Plan is already locked for this running week
+        document.querySelectorAll('#routeplan-days input[data-date]').forEach(inp => {
+          inp.readOnly = true;
+        });
+        if (saveBtn) saveBtn.style.display = 'none';   // Save button hata do
+        if (cancelBtn) cancelBtn.textContent = 'Close'; // UX: sirf Close
+      }
     }
   }
 
