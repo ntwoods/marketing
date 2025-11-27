@@ -671,15 +671,19 @@ function openActivityModal(prefill = {}) {
   document.getElementById('client-mobile').value = prefill.mobile || '';
 
   const stationInput = document.getElementById('client-station');
+  
   if (prefill.station) {
+    // Follow-up complete karte time: jo station already hai, wo value me hi rahe
     stationInput.value = prefill.station;
     stationInput.placeholder = '';
-  } else if (routePlanInfo && routePlanInfo.todayStation) {
-    stationInput.value = routePlanInfo.todayStation;
-    stationInput.placeholder = `Planned: ${routePlanInfo.todayStation}`;
   } else {
+    // New activity: value blank rahe, sirf planned station placeholder me aaye
     stationInput.value = '';
-    stationInput.placeholder = '';
+    if (routePlanInfo && routePlanInfo.todayStation) {
+      stationInput.placeholder = `Planned: ${routePlanInfo.todayStation}`;
+    } else {
+      stationInput.placeholder = '';
+    }
   }
 
   document.getElementById('client-address').value = prefill.address || '';
