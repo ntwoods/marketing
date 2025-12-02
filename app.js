@@ -107,13 +107,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Activity type toggle
-  document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const type = btn.dataset.type;
-    });
+// Activity type toggle
+document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Call / Visit change hote hi Station field ko toggle karo
+    updateStationVisibility();
   });
+});
 
   // Outcome toggle
   document.querySelectorAll('.outcome-btn').forEach(btn => {
