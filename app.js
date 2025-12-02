@@ -961,6 +961,22 @@ function formatDiff(diffMs) {
 
 /******** UTILS ********/
 
+function updateStationVisibility() {
+  const group = document.getElementById('station-group');
+  if (!group) return;
+
+  const type = getSelectedActivityType(); // CALL / VISIT
+
+  if (type === 'VISIT') {
+    // Visit activity → Station field dikhe
+    group.style.display = '';
+  } else {
+    // Call activity → Station field bilkul nahi dikhe
+    group.style.display = 'none';
+  }
+}
+
+
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   // Hamesha string bana lo, chahe number ho ya kuch bhi
