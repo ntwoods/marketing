@@ -112,8 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('#activity-type-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const type = btn.dataset.type;
-      const addressGroup = document.getElementById('address-group');
-      addressGroup.style.display = 'block'; // field hamesha dikhana hai
     });
   });
 
@@ -654,7 +652,6 @@ function openActivityModalFromFollowup(f) {
     clientName: f.clientName,
     mobile: f.mobile,
     station: f.station,
-    address: f.address,
     forceType: f.nextActionType // CALL / VISIT
   });
 }
@@ -686,7 +683,6 @@ function openActivityModal(prefill = {}) {
     }
   }
 
-  document.getElementById('client-address').value = prefill.address || '';
 
   // Activity type
   const typeToSelect = prefill.forceType || 'CALL';
@@ -758,7 +754,6 @@ async function saveActivity() {
   const clientName = document.getElementById('client-name').value.trim();
   const mobile = document.getElementById('client-mobile').value.trim();
   const station = document.getElementById('client-station').value.trim();
-  const address = document.getElementById('client-address').value.trim();
 
   if (!clientName || !mobile) {
     alert('Client name and mobile are required.');
@@ -774,7 +769,6 @@ async function saveActivity() {
     clientName: clientName,
     mobile: mobile,
     station: station,
-    address: address,
     outcome: outcome
   };
 
