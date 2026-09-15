@@ -197,3 +197,56 @@
     });
   };
 })();
+
+/*
+ * Activity submit UX guard.
+ *
+ * All Call / Visit / Follow-up settlement submissions flow through
+ * saveActivity(). Lock the button for the complete async operation so a user
+ * cannot create accidental duplicate activities while the request is being
+ * processed or verified.
+ */
+(function installActivitySubmitGuard() {
+  'use strict';
+
+  if (window.__NTW_ACTIVITY_SUBMIT_GUARD__) return;
+  window.__NTW_ACTIVITY_SUBMIT_GUARD__ = true;
+
+  const originalSaveActivity = window.saveActivity;
+  if (typeof originalSaveActivity !== 'function') {
+    console.warn('Activity submit guard: saveActivity() was not found.');
+    return;
+  }
+
+  let isSubmitting = false;
+
+  window.saveActivity = async function guardedSaveActivity(...args) {
+    if (isSubmitting) {
+      console.warn('Duplicate activity submission blocked.');
+      return;
+    }
+
+    const btn = document.getElementById('btn-save-activity');
+    const originalText = btn ? btn.textContent : 'Save';
+
+    isSubmitting = true;
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Processing…';
+      btn.setAttribute('aria-busy', 'true');
+    }
+
+    try {
+      return await originalSaveActivity.apply(this, args);
+    } finally {
+      isSubmitting = false;
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText || 'Save';
+        btn.removeAttribute('aria-busy');
+      }
+    }
+  };
+})();
